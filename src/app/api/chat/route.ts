@@ -217,8 +217,15 @@ export async function POST(req: Request) {
             .update({ xp: (profile.xp ?? 0) + xpEarned })
             .eq("id", user.id);
       } catch (e) {
+        const status = (e as { status?: number })?.status;
+        const outOfCredits =
+          status === 402 || /credit|afford/i.test(String((e as Error)?.message ?? ""));
         controller.enqueue(
-          encoder.encode("\n\n(Connection hiccup — send your message again.)")
+          encoder.encode(
+            outOfCredits
+              ? "\n\n⚠️ Your teacher is temporarily unavailable — the AI service has run out of credits. (Top up at openrouter.ai/settings/credits to restore it.)"
+              : "\n\n(Connection hiccup — send your message again.)"
+          )
         );
         console.error("chat error", e);
       }
