@@ -29,6 +29,34 @@ export default function Library() {
   const [asSyllabus, setAsSyllabus] = useState(false);
   const [attachTo, setAttachTo] = useState<string>("");
   const [status, setStatus] = useState("");
+  const [matBusy, setMatBusy] = useState("");
+  const [matSummary, setMatSummary] = useState<{ id: string; title: string; content: string } | null>(null);
+
+  async function summarise(m: Material) {
+    setMatBusy(m.id + ":s");
+    setMatSummary(null);
+    const res = await fetch("/api/summary", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ materialId: m.id, courseId: m.course_id }),
+    });
+    const out = await res.json().catch(() => ({}));
+    setMatBusy("");
+    if (out.summary) setMatSummary({ id: m.id, ...out.summary });
+  }
+
+  async function makeCards(m: Material) {
+    if (!m.course_id) return;
+    setMatBusy(m.id + ":c");
+    const res = await fetch("/api/flashcards/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ courseId: m.course_id, materialId: m.id }),
+    });
+    const out = await res.json().catch(() => ({}));
+    setMatBusy("");
+    setStatus(out.ok ? `Added ${out.created} flashcards — review in Study ✓` : "Couldn't make cards");
+  }
 
   async function refresh(userId: string) {
     const { data: m } = await supabase
@@ -163,24 +191,52 @@ export default function Library() {
 
       <div className="flex flex-col gap-2 rise d2">
         {materials.map((m) => (
-          <div key={m.id} className="card p-3.5 flex items-center gap-3">
-            <span className="text-lg">
-              {m.kind === "pdf" ? "📕" : m.kind === "image" ? "🖼" : m.kind === "syllabus" ? "📄" : "📝"}
-            </span>
-            <p className="text-sm truncate flex-1">{m.filename}</p>
-            <span
-              className="text-[11px] font-bold"
-              style={{
-                color:
-                  m.status === "ready"
-                    ? "var(--accent)"
-                    : m.status === "error"
-                      ? "#c0392b"
-                      : "var(--ink-faint)",
-              }}
-            >
-              {m.status === "ready" ? "✓ ready" : m.status === "error" ? "failed" : "…"}
-            </span>
+          <div key={m.id} className="card p-3.5 flex flex-col gap-2.5">
+            <div className="flex items-center gap-3">
+              <span className="text-lg">
+                {m.kind === "pdf" ? "📕" : m.kind === "image" ? "🖼" : m.kind === "syllabus" ? "📄" : "📝"}
+              </span>
+              <p className="text-sm truncate flex-1">{m.filename}</p>
+              <span
+                className="text-[11px] font-bold"
+                style={{
+                  color:
+                    m.status === "ready"
+                      ? "var(--accent)"
+                      : m.status === "error"
+                        ? "#c0392b"
+                        : "var(--ink-faint)",
+                }}
+              >
+                {m.status === "ready" ? "✓ ready" : m.status === "error" ? "failed" : "…"}
+              </span>
+            </div>
+            {m.status === "ready" && m.kind !== "syllabus" && (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => summarise(m)}
+                  disabled={matBusy === m.id + ":s"}
+                  className="chip flex-1 justify-center py-1.5"
+                >
+                  {matBusy === m.id + ":s" ? "…" : "≣ Summarise"}
+                </button>
+                <button
+                  onClick={() => makeCards(m)}
+                  disabled={!m.course_id || matBusy === m.id + ":c"}
+                  className="chip flex-1 justify-center py-1.5"
+                >
+                  {matBusy === m.id + ":c" ? "…" : "▤ Flashcards"}
+                </button>
+              </div>
+            )}
+            {matSummary?.id === m.id && (
+              <div className="border-t border-[color:var(--line)] pt-2">
+                <p className="font-semibold text-sm">{matSummary.title}</p>
+                <p className="text-xs text-[color:var(--ink-soft)] whitespace-pre-wrap mt-1 leading-relaxed">
+                  {matSummary.content}
+                </p>
+              </div>
+            )}
           </div>
         ))}
       </div>

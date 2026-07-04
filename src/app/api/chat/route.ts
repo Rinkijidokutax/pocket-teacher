@@ -14,6 +14,8 @@ import { XP } from "@/lib/levels";
 export const maxDuration = 120;
 
 const FREE_DAILY_MESSAGES = 25;
+// Free for everyone during testing. Flip FREE_TESTING=false to re-enable the cap.
+const FREE_TESTING = process.env.FREE_TESTING !== "false";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -45,7 +47,7 @@ export async function POST(req: Request) {
     .eq("day", today())
     .maybeSingle();
   const used = usage?.messages ?? 0;
-  if (!profile.premium && used >= FREE_DAILY_MESSAGES)
+  if (!FREE_TESTING && !profile.premium && used >= FREE_DAILY_MESSAGES)
     return Response.json({ error: "daily_limit", used }, { status: 402 });
   await supabase
     .from("usage")
