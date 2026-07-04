@@ -42,21 +42,22 @@ export default function Home() {
   if (!loaded || !profile)
     return (
       <main className="min-h-screen flex items-center justify-center">
-        <p className="text-slate-400 animate-pulse">Loading…</p>
+        <p className="text-[color:var(--ink-faint)] animate-pulse">Loading…</p>
       </main>
     );
 
   const first = courses[0];
+  const greeting = new Date().getHours() < 12 ? "Good morning" : new Date().getHours() < 18 ? "Good afternoon" : "Good evening";
 
   return (
-    <main className="flex-1 px-5 pt-12 pb-28 max-w-md mx-auto w-full flex flex-col gap-5 min-h-screen">
-      <header className="flex items-center justify-between">
+    <main className="flex-1 px-6 pt-14 pb-28 max-w-md mx-auto w-full flex flex-col gap-5 min-h-screen">
+      <header className="flex items-end justify-between rise">
         <div>
-          <h1 className="text-2xl font-black">Hi {profile.name} 👋</h1>
-          <p className="text-slate-400 text-sm">Let&apos;s keep the streak alive.</p>
+          <p className="eyebrow">{greeting}</p>
+          <h1 className="display text-3xl font-semibold mt-1">{profile.name}</h1>
         </div>
         <button
-          className="text-[11px] text-slate-500"
+          className="text-[11px] text-[color:var(--ink-faint)] underline underline-offset-2"
           onClick={async () => {
             await supabase.auth.signOut();
             router.replace("/");
@@ -66,32 +67,29 @@ export default function Home() {
         </button>
       </header>
 
-      <XpHeader name={profile.name} xp={profile.xp} streak={profile.streak} />
+      <XpHeader xp={profile.xp} streak={profile.streak} />
 
       {first && (
-        <Link
-          href={`/session?course=${first.course_id}`}
-          className="btn text-lg py-5 pop"
-        >
-          <span className="text-2xl mr-1">{first.courses?.emoji}</span>
-          Start today&apos;s {first.courses?.subject} lesson →
+        <Link href={`/session?course=${first.course_id}`} className="btn text-base py-5 rise d1">
+          <span className="text-xl mr-1">{first.courses?.emoji}</span>
+          Continue {first.courses?.subject} →
         </Link>
       )}
 
-      <section>
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-sm font-bold text-slate-300">My subjects</h2>
-          <Link href="/courses" className="text-xs text-fuchsia-300 font-semibold">
-            + Add
+      <section className="rise d2">
+        <div className="flex items-center justify-between mb-2.5">
+          <p className="eyebrow">My subjects</p>
+          <Link href="/courses" className="text-xs font-semibold" style={{ color: "var(--accent)" }}>
+            + Add subject
           </Link>
         </div>
         {courses.length === 0 ? (
-          <Link href="/courses" className="card p-5 block text-center text-slate-300">
-            <p className="text-3xl mb-1">➕</p>
+          <Link href="/courses" className="card p-6 block text-center text-[color:var(--ink-soft)]">
+            <p className="text-2xl mb-1">＋</p>
             Add your first subject to begin
           </Link>
         ) : (
-          <div className="grid grid-cols-2 gap-2.5">
+          <div className="grid grid-cols-2 gap-3">
             {courses.map((c) => {
               const days = c.exam_date
                 ? Math.ceil((new Date(c.exam_date).getTime() - Date.now()) / 86400000)
@@ -100,17 +98,15 @@ export default function Home() {
                 <Link
                   key={c.course_id}
                   href={`/session?course=${c.course_id}`}
-                  className="card p-4 active:scale-[0.97] transition"
+                  className="card p-4 transition hover:-translate-y-0.5"
                 >
-                  <div className="text-3xl">{c.courses?.emoji}</div>
-                  <p className="font-bold text-sm mt-1.5 leading-tight">
-                    {c.courses?.subject}
-                  </p>
-                  <p className="text-[10px] text-slate-400 uppercase tracking-wide">
-                    {c.courses?.board}
-                  </p>
+                  <div className="text-2xl">{c.courses?.emoji}</div>
+                  <p className="font-semibold text-sm mt-2 leading-tight">{c.courses?.subject}</p>
+                  <p className="eyebrow mt-0.5">{c.courses?.board}</p>
                   {days !== null && (
-                    <p className="text-[11px] text-amber-300 mt-1">📅 {days}d to exam</p>
+                    <p className="text-[11px] mt-2 font-semibold" style={{ color: "var(--streak)" }}>
+                      {days}d to exam
+                    </p>
                   )}
                 </Link>
               );

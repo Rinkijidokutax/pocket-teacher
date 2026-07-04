@@ -1,76 +1,198 @@
 @import "tailwindcss";
 
+/* ================= Editorial Study — design system =================
+   Warm paper, ink, one electric-cobalt accent. Fraunces serif display +
+   Geist grotesque body. Hairline grid, refined gamification. Light theme. */
+
 @theme inline {
+  --font-display: var(--font-fraunces);
   --font-sans: var(--font-geist-sans);
-  --color-ink: #0b0a1f;
-  --color-ink2: #17143a;
 }
 
 :root {
-  color-scheme: dark;
+  --paper: #f7f4ec;
+  --paper-2: #f1ede1;
+  --card: #fffdf7;
+  --ink: #1a1712;
+  --ink-soft: #6b655a;
+  --ink-faint: #a39c8c;
+  --line: #e6dfcf;
+  --line-strong: #d8d0bc;
+  --accent: #2438e0; /* electric cobalt */
+  --accent-soft: #eceafb;
+  --streak: #e2620d; /* burnt orange */
+  --gold: #c9971f;
+  color-scheme: light;
+}
+
+* {
+  border-color: var(--line);
 }
 
 body {
-  background:
-    radial-gradient(1200px 600px at 80% -10%, rgba(217, 70, 239, 0.18), transparent 60%),
-    radial-gradient(900px 500px at -10% 20%, rgba(124, 58, 237, 0.20), transparent 55%),
-    radial-gradient(700px 500px at 50% 120%, rgba(245, 158, 11, 0.12), transparent 60%),
-    #0b0a1f;
-  color: #f4f2ff;
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  background-color: var(--paper);
+  /* faint systems grid + warm vignette for atmosphere */
+  background-image:
+    linear-gradient(var(--line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line) 1px, transparent 1px),
+    radial-gradient(900px 500px at 100% -5%, rgba(36, 56, 224, 0.05), transparent 60%);
+  background-size: 44px 44px, 44px 44px, 100% 100%;
+  background-position: -1px -1px, -1px -1px, 0 0;
+  color: var(--ink);
+  font-family: var(--font-sans), system-ui, sans-serif;
   -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* ---- gamified building blocks ---- */
+.display {
+  font-family: var(--font-display), Georgia, serif;
+  font-optical-sizing: auto;
+  letter-spacing: -0.02em;
+  line-height: 0.98;
+}
+
+/* ---- surfaces & controls ---- */
 .card {
-  @apply rounded-[28px] bg-white/[0.06] border border-white/10 backdrop-blur-xl;
-  box-shadow: 0 10px 40px -20px rgba(124, 58, 237, 0.5);
-}
-.btn {
-  @apply rounded-2xl font-bold text-white px-6 py-4 text-center transition active:scale-[0.97] disabled:opacity-40;
-  background: linear-gradient(135deg, #7c3aed 0%, #d946ef 55%, #f59e0b 130%);
-  box-shadow: 0 10px 30px -8px rgba(217, 70, 239, 0.55);
-}
-.btn-ghost {
-  @apply rounded-2xl font-semibold px-5 py-3 text-center border border-white/15 bg-white/5 active:scale-[0.97] transition;
-}
-.input {
-  @apply w-full rounded-2xl bg-white/5 border border-white/10 px-4 py-3.5 text-sm outline-none focus:border-fuchsia-400/70 transition;
-  color-scheme: dark;
-}
-.chip {
-  @apply rounded-full px-3 py-1 text-xs font-semibold bg-white/8 border border-white/10;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: 0 1px 2px rgba(26, 23, 18, 0.04), 0 14px 30px -24px rgba(26, 23, 18, 0.22);
 }
 
-/* XP / progress bar */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background: var(--ink);
+  color: var(--paper);
+  font-weight: 600;
+  border-radius: 14px;
+  padding: 1rem 1.5rem;
+  transition: transform 0.15s, background 0.2s, box-shadow 0.2s;
+  box-shadow: 0 8px 20px -12px rgba(26, 23, 18, 0.7);
+}
+.btn:active { transform: scale(0.98); }
+.btn:hover { background: #000; }
+.btn:disabled { opacity: 0.35; }
+
+.btn-accent {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 8px 22px -12px rgba(36, 56, 224, 0.8);
+}
+.btn-accent:hover { background: #1c2eb8; }
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--ink);
+  font-weight: 600;
+  border-radius: 14px;
+  padding: 0.75rem 1.25rem;
+  transition: transform 0.15s, background 0.2s;
+}
+.btn-ghost:active { transform: scale(0.98); }
+.btn-ghost:hover { background: rgba(26, 23, 18, 0.04); }
+
+.input {
+  width: 100%;
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+  font-size: 0.9rem;
+  color: var(--ink);
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border: 1px solid var(--line-strong);
+  background: var(--card);
+  border-radius: 999px;
+  padding: 0.4rem 0.8rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+.chip-on {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+
+/* selectable tile (courses, levels) */
+.tile {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  transition: border-color 0.2s, transform 0.15s, box-shadow 0.2s;
+}
+.tile:active { transform: scale(0.98); }
+.tile-on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* ---- XP progress ---- */
 .xpbar {
-  @apply h-3 rounded-full bg-white/10 overflow-hidden;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--paper-2);
+  border: 1px solid var(--line);
+  overflow: hidden;
 }
 .xpbar > span {
-  @apply block h-full rounded-full;
-  background: linear-gradient(90deg, #a855f7, #f472b6, #fbbf24);
-  transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.7s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-@keyframes pop {
-  0% { transform: scale(0.8); opacity: 0; }
-  60% { transform: scale(1.06); }
-  100% { transform: scale(1); opacity: 1; }
+/* eyebrow / label */
+.eyebrow {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
 }
-.pop { animation: pop 0.35s cubic-bezier(0.22, 1, 0.36, 1) both; }
 
-@keyframes floaty {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-6px); }
+/* ---- motion ---- */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
-.floaty { animation: floaty 3s ease-in-out infinite; }
+.rise { animation: rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.d1 { animation-delay: 0.05s; }
+.d2 { animation-delay: 0.12s; }
+.d3 { animation-delay: 0.2s; }
+.d4 { animation-delay: 0.28s; }
 
-@keyframes flamePulse {
-  0%, 100% { transform: scale(1) rotate(-2deg); }
-  50% { transform: scale(1.12) rotate(2deg); }
+@keyframes flick {
+  0%, 100% { transform: rotate(-3deg) scale(1); }
+  50% { transform: rotate(3deg) scale(1.08); }
 }
-.flame { display: inline-block; animation: flamePulse 1.4s ease-in-out infinite; }
+.flame { display: inline-block; animation: flick 1.6s ease-in-out infinite; }
 
-/* hide scrollbars on chat */
+@keyframes popin {
+  0% { opacity: 0; transform: translateY(6px) scale(0.9); }
+  60% { transform: translateY(0) scale(1.04); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.popin { animation: popin 0.35s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }

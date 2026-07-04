@@ -116,22 +116,27 @@ export default function Session() {
 
   return (
     <main className="flex flex-col min-h-screen max-w-md mx-auto w-full">
-      <header className="px-5 pt-11 pb-3 flex justify-between items-center border-b border-white/5">
-        <button onClick={() => router.push("/home")} className="text-slate-400 text-sm">
+      <header className="px-5 pt-12 pb-3 flex justify-between items-center border-b border-[color:var(--line)] bg-[color:var(--paper)]/85 backdrop-blur-xl sticky top-0 z-20">
+        <button onClick={() => router.push("/home")} className="text-[color:var(--ink-soft)] text-sm">
           ‹ Home
         </button>
-        <p className="text-sm font-bold truncate max-w-[55%]">{subject || "Lesson"}</p>
+        <p className="font-semibold text-sm truncate max-w-[55%]">{subject || "Lesson"}</p>
         {usage ? (
-          <span className="text-[11px] text-slate-500">{usage.used}/{usage.cap}</span>
+          <span className="text-[11px] text-[color:var(--ink-faint)]">
+            {usage.used}/{usage.cap}
+          </span>
         ) : (
           <span className="w-8" />
         )}
       </header>
 
       {xpToast > 0 && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-40 pop">
-          <div className="rounded-full px-5 py-2 font-black text-sm bg-gradient-to-r from-violet-600 to-fuchsia-600 shadow-lg">
-            ⚡ +{xpToast} XP
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-40 popin">
+          <div
+            className="rounded-full px-4 py-1.5 font-bold text-sm text-white"
+            style={{ background: "var(--accent)" }}
+          >
+            +{xpToast} XP
           </div>
         </div>
       )}
@@ -140,40 +145,40 @@ export default function Session() {
         {messages.map((m, i) => (
           <div
             key={i}
-            className={`rounded-3xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap max-w-[86%] ${
+            className={`px-4 py-3 text-[14px] leading-relaxed whitespace-pre-wrap max-w-[86%] ${
               m.role === "user"
-                ? "self-end text-white"
-                : "self-start card"
+                ? "self-end text-[color:var(--paper)] rounded-2xl rounded-br-md"
+                : "self-start card rounded-2xl rounded-bl-md"
             }`}
-            style={
-              m.role === "user"
-                ? { background: "linear-gradient(135deg,#7c3aed,#d946ef)" }
-                : undefined
-            }
+            style={m.role === "user" ? { background: "var(--ink)" } : undefined}
           >
             {m.content || (
-              <span className="inline-flex gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-fuchsia-300 animate-bounce" />
-                <span className="w-1.5 h-1.5 rounded-full bg-fuchsia-300 animate-bounce [animation-delay:0.15s]" />
-                <span className="w-1.5 h-1.5 rounded-full bg-fuchsia-300 animate-bounce [animation-delay:0.3s]" />
+              <span className="inline-flex gap-1 py-1">
+                {[0, 0.15, 0.3].map((d) => (
+                  <span
+                    key={d}
+                    className="w-1.5 h-1.5 rounded-full animate-bounce"
+                    style={{ background: "var(--accent)", animationDelay: `${d}s` }}
+                  />
+                ))}
               </span>
             )}
           </div>
         ))}
         {capped && (
-          <div className="card p-4 text-sm text-amber-200 border-amber-400/30">
-            🎉 That&apos;s all your free lessons for today! Come back tomorrow to keep
-            your streak — or upgrade for unlimited teaching (coming soon).
+          <div className="card p-4 text-sm" style={{ borderColor: "var(--streak)" }}>
+            <p className="font-semibold mb-1">That&apos;s your free lessons for today 🎉</p>
+            <p className="text-[color:var(--ink-soft)]">
+              Come back tomorrow to keep your streak — or upgrade for unlimited teaching
+              (coming soon).
+            </p>
           </div>
         )}
         <div ref={bottomRef} />
       </div>
 
-      <form
-        onSubmit={submit}
-        className="fixed bottom-14 inset-x-0 max-w-md mx-auto px-4 pb-3"
-      >
-        <div className="flex gap-2 card p-2">
+      <form onSubmit={submit} className="fixed bottom-14 inset-x-0 max-w-md mx-auto px-4 pb-3">
+        <div className="flex gap-2 card p-1.5 items-center">
           <input
             className="flex-1 bg-transparent outline-none px-3 text-sm"
             placeholder={capped ? "See you tomorrow!" : "Type your answer…"}
@@ -183,7 +188,7 @@ export default function Session() {
           />
           <button
             disabled={capped || streaming || !input.trim()}
-            className="btn px-5 py-2.5 text-sm rounded-xl"
+            className="btn px-4 py-2.5 text-sm"
           >
             Send
           </button>

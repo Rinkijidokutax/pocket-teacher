@@ -45,11 +45,14 @@ export default function Login() {
   }
 
   return (
-    <main className="flex-1 flex flex-col justify-center px-6 max-w-md mx-auto w-full min-h-screen gap-6">
-      <h1 className="text-3xl font-bold text-center">
-        {mode === "signup" ? "Create your account" : "Welcome back"}
-      </h1>
-      <form onSubmit={submit} className="flex flex-col gap-3">
+    <main className="flex-1 flex flex-col justify-center px-7 max-w-md mx-auto w-full min-h-screen gap-6">
+      <div className="rise">
+        <p className="eyebrow">{mode === "signup" ? "Get started" : "Welcome back"}</p>
+        <h1 className="display text-4xl font-semibold mt-2">
+          {mode === "signup" ? "Create your\naccount" : "Sign in"}
+        </h1>
+      </div>
+      <form onSubmit={submit} className="flex flex-col gap-3 rise d1">
         {mode === "signup" && (
           <input
             className="input"
@@ -76,19 +79,17 @@ export default function Login() {
           minLength={6}
           required
         />
-        {error && <p className="text-red-400 text-sm">{error}</p>}
-        {notice && <p className="text-emerald-400 text-sm">{notice}</p>}
+        {error && <p className="text-[#c0392b] text-sm">{error}</p>}
+        {notice && <p className="text-[color:var(--accent)] text-sm">{notice}</p>}
         <button disabled={busy} className="btn mt-2">
-          {busy ? "..." : mode === "signup" ? "Sign up" : "Sign in"}
+          {busy ? "…" : mode === "signup" ? "Sign up" : "Sign in"}
         </button>
       </form>
       <button
-        className="text-slate-400 text-sm"
+        className="text-[color:var(--ink-soft)] text-sm underline underline-offset-4 decoration-[color:var(--line-strong)] rise d2"
         onClick={() => setMode(mode === "signup" ? "signin" : "signup")}
       >
-        {mode === "signup"
-          ? "Already have an account? Sign in"
-          : "New here? Create an account"}
+        {mode === "signup" ? "Already have an account? Sign in" : "New here? Create an account"}
       </button>
     </main>
   );

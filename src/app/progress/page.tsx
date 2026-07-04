@@ -13,16 +13,17 @@ type Row = {
   topics: { name: string; unit: string; sort: number; course_id: string } | null;
 };
 
+// mastery colour scale — muted paper → confident cobalt
 function color(s: number) {
-  if (s >= 75) return "#34d399";
-  if (s >= 50) return "#a3e635";
-  if (s >= 30) return "#fbbf24";
-  return "#fb7185";
+  if (s >= 75) return "#2438e0";
+  if (s >= 50) return "#5b6fe8";
+  if (s >= 30) return "#c9971f";
+  return "#d8613a";
 }
 
 export default function Progress() {
   const router = useRouter();
-  const [profile, setProfile] = useState<{ name: string; xp: number; streak: number } | null>(null);
+  const [profile, setProfile] = useState<{ xp: number; streak: number } | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
   const [active, setActive] = useState<string>("");
   const [rows, setRows] = useState<Row[]>([]);
@@ -33,10 +34,10 @@ export default function Progress() {
       if (!user) return router.replace("/login");
       const { data: p } = await supabase
         .from("profiles")
-        .select("name, xp, streak")
+        .select("xp, streak")
         .eq("id", user.id)
         .maybeSingle();
-      setProfile({ name: p?.name?.split(" ")[0] ?? "", xp: p?.xp ?? 0, streak: p?.streak ?? 0 });
+      setProfile({ xp: p?.xp ?? 0, streak: p?.streak ?? 0 });
       const { data: e } = await supabase
         .from("enrollments")
         .select("course_id, courses(subject, emoji)")
@@ -53,10 +54,7 @@ export default function Progress() {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const { data: topics } = await supabase
-        .from("topics")
-        .select("id")
-        .eq("course_id", active);
+      const { data: topics } = await supabase.from("topics").select("id").eq("course_id", active);
       const ids = (topics ?? []).map((t) => t.id);
       if (ids.length === 0) return setRows([]);
       const { data } = await supabase
@@ -77,24 +75,22 @@ export default function Progress() {
     : 0;
 
   return (
-    <main className="flex-1 px-5 pt-12 pb-28 max-w-md mx-auto w-full flex flex-col gap-4 min-h-screen">
-      <h1 className="text-2xl font-black">Your map 🗺️</h1>
-      {profile && <XpHeader name={profile.name} xp={profile.xp} streak={profile.streak} />}
+    <main className="flex-1 px-6 pt-14 pb-28 max-w-md mx-auto w-full flex flex-col gap-5 min-h-screen">
+      <h1 className="display text-3xl font-semibold rise">Your map</h1>
+      {profile && <XpHeader xp={profile.xp} streak={profile.streak} />}
 
       {courses.length === 0 ? (
-        <Link href="/courses" className="card p-5 text-center text-slate-300">
+        <Link href="/courses" className="card p-6 text-center text-[color:var(--ink-soft)]">
           Add a subject to start building your map →
         </Link>
       ) : (
         <>
-          <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-1 px-1">
+          <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-1 px-1 rise d1">
             {courses.map((c) => (
               <button
                 key={c.course_id}
                 onClick={() => setActive(c.course_id)}
-                className={`chip whitespace-nowrap ${
-                  active === c.course_id ? "bg-fuchsia-500/25 border-fuchsia-400/50" : ""
-                }`}
+                className={`chip whitespace-nowrap ${active === c.course_id ? "chip-on" : ""}`}
               >
                 {c.courses?.emoji} {c.courses?.subject}
               </button>
@@ -102,28 +98,30 @@ export default function Progress() {
           </div>
 
           {rows.length > 0 && (
-            <div className="card p-4 flex items-center justify-between">
-              <p className="text-sm text-slate-300">Overall mastery</p>
-              <p className="text-2xl font-black" style={{ color: color(overall) }}>
-                {overall}%
+            <div className="card p-5 flex items-center justify-between rise d1">
+              <div>
+                <p className="eyebrow">Overall mastery</p>
+                <p className="text-xs text-[color:var(--ink-faint)] mt-1">{rows.length} topics</p>
+              </div>
+              <p className="display text-4xl font-semibold" style={{ color: color(overall) }}>
+                {overall}
+                <span className="text-xl">%</span>
               </p>
             </div>
           )}
 
-          {units.map((unit) => {
+          {units.map((unit, ui) => {
             const ur = rows.filter((r) => r.topics?.unit === unit);
             return (
-              <section key={unit}>
-                <h2 className="text-xs font-bold text-slate-300 mb-1.5">{unit}</h2>
-                <div className="flex flex-col gap-1.5">
+              <section key={unit} className={`rise ${ui < 3 ? "d2" : ""}`}>
+                <p className="eyebrow mb-2">{unit}</p>
+                <div className="flex flex-col gap-2">
                   {ur.map((r) => (
-                    <div key={r.topic_id} className="flex items-center gap-2.5">
-                      <div className="flex-1 text-xs text-slate-300 truncate">
-                        {r.topics?.name}
-                      </div>
-                      <div className="w-24 h-2 rounded-full bg-white/10 overflow-hidden">
+                    <div key={r.topic_id} className="flex items-center gap-3">
+                      <div className="flex-1 text-[13px] truncate">{r.topics?.name}</div>
+                      <div className="w-24 h-1.5 rounded-full bg-[color:var(--paper-2)] overflow-hidden">
                         <div
-                          className="h-2 rounded-full"
+                          className="h-full rounded-full"
                           style={{ width: `${r.score}%`, background: color(r.score) }}
                         />
                       </div>

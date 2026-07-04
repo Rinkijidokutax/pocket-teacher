@@ -61,9 +61,7 @@ export default function Library() {
     setStatus("Uploading…");
     const kind = asSyllabus ? "syllabus" : kindOf(file.name);
     const path = `${uid}/${crypto.randomUUID()}-${file.name}`;
-    const { error: upErr } = await supabase.storage
-      .from("materials")
-      .upload(path, file);
+    const { error: upErr } = await supabase.storage.from("materials").upload(path, file);
     if (upErr) {
       setStatus("Upload failed: " + upErr.message);
       return;
@@ -97,31 +95,33 @@ export default function Library() {
       router.push(`/session?course=${out.courseId}`);
       return;
     }
-    setStatus(res.ok ? "Done ✓ your teacher can use it now" : "Processing failed");
+    setStatus(res.ok ? "Ready ✓ your teacher can use it now" : "Processing failed");
     if (fileRef.current) fileRef.current.value = "";
   }
 
   return (
-    <main className="flex-1 px-5 pt-12 pb-28 max-w-md mx-auto w-full flex flex-col gap-4 min-h-screen">
-      <h1 className="text-2xl font-black">📚 Library</h1>
-      <p className="text-slate-400 text-sm -mt-2">
-        Upload notes, past papers, a photo of a problem, or a whole syllabus. Your
-        teacher reads them and teaches from your material.
-      </p>
+    <main className="flex-1 px-6 pt-14 pb-28 max-w-md mx-auto w-full flex flex-col gap-5 min-h-screen">
+      <div className="rise">
+        <h1 className="display text-3xl font-semibold">Library</h1>
+        <p className="text-sm text-[color:var(--ink-soft)] mt-2">
+          Upload notes, past papers, a photo of a problem, or a whole syllabus. Your
+          teacher reads them and teaches from your material.
+        </p>
+      </div>
 
-      <div className="card p-4 flex flex-col gap-3">
+      <div className="card p-4 flex flex-col gap-3 rise d1">
         <div className="flex gap-2">
           <button
             onClick={() => setAsSyllabus(false)}
-            className={`chip flex-1 py-2 ${!asSyllabus ? "bg-fuchsia-500/25 border-fuchsia-400/50" : ""}`}
+            className={`chip flex-1 justify-center py-2 ${!asSyllabus ? "chip-on" : ""}`}
           >
-            📎 Study material
+            Study material
           </button>
           <button
             onClick={() => setAsSyllabus(true)}
-            className={`chip flex-1 py-2 ${asSyllabus ? "bg-fuchsia-500/25 border-fuchsia-400/50" : ""}`}
+            className={`chip flex-1 justify-center py-2 ${asSyllabus ? "chip-on" : ""}`}
           >
-            📄 A syllabus
+            A syllabus
           </button>
         </div>
 
@@ -151,30 +151,33 @@ export default function Library() {
         <label htmlFor="fileup" className="btn cursor-pointer">
           {asSyllabus ? "Upload syllabus (PDF / photo)" : "Choose a file"}
         </label>
-        {status && <p className="text-sm text-fuchsia-300">{status}</p>}
-        <p className="text-[11px] text-slate-500">
+        {status && (
+          <p className="text-sm font-medium" style={{ color: "var(--accent)" }}>
+            {status}
+          </p>
+        )}
+        <p className="text-[11px] text-[color:var(--ink-faint)]">
           Images, PDFs and text supported. Video coming soon.
         </p>
       </div>
 
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-2 rise d2">
         {materials.map((m) => (
-          <div
-            key={m.id}
-            className="card p-3 flex items-center gap-3"
-          >
-            <span className="text-xl">
-              {m.kind === "pdf" ? "📕" : m.kind === "image" ? "🖼️" : m.kind === "syllabus" ? "📄" : "📝"}
+          <div key={m.id} className="card p-3.5 flex items-center gap-3">
+            <span className="text-lg">
+              {m.kind === "pdf" ? "📕" : m.kind === "image" ? "🖼" : m.kind === "syllabus" ? "📄" : "📝"}
             </span>
             <p className="text-sm truncate flex-1">{m.filename}</p>
             <span
-              className={`text-[11px] font-semibold ${
-                m.status === "ready"
-                  ? "text-emerald-300"
-                  : m.status === "error"
-                    ? "text-rose-300"
-                    : "text-amber-300"
-              }`}
+              className="text-[11px] font-bold"
+              style={{
+                color:
+                  m.status === "ready"
+                    ? "var(--accent)"
+                    : m.status === "error"
+                      ? "#c0392b"
+                      : "var(--ink-faint)",
+              }}
             >
               {m.status === "ready" ? "✓ ready" : m.status === "error" ? "failed" : "…"}
             </span>

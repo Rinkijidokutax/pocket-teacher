@@ -4,8 +4,8 @@
   "description": "A teacher in your pocket — adapts to your strengths, weaknesses and habits, toward your exam.",
   "start_url": "/home",
   "display": "standalone",
-  "background_color": "#0c0a1d",
-  "theme_color": "#0c0a1d",
+  "background_color": "#f7f4ec",
+  "theme_color": "#f7f4ec",
   "icons": [
     { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }

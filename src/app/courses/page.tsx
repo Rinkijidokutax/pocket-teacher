@@ -55,35 +55,33 @@ export default function Courses() {
   }
 
   return (
-    <main className="flex-1 px-5 pt-12 pb-28 max-w-md mx-auto w-full flex flex-col gap-4 min-h-screen">
-      <h1 className="text-2xl font-black">Add a subject</h1>
+    <main className="flex-1 px-6 pt-14 pb-28 max-w-md mx-auto w-full flex flex-col gap-5 min-h-screen">
+      <h1 className="display text-3xl font-semibold rise">Add a subject</h1>
 
-      <Link href="/library?syllabus=1" className="card p-4 flex items-center gap-3">
+      <Link href="/library?syllabus=1" className="card p-4 flex items-center gap-3 rise d1">
         <span className="text-2xl">📄</span>
-        <div>
-          <p className="font-bold text-sm">Upload your own syllabus</p>
-          <p className="text-xs text-slate-400">
+        <div className="flex-1">
+          <p className="font-semibold text-sm">Upload your own syllabus</p>
+          <p className="text-xs text-[color:var(--ink-faint)]">
             PDF or photo — we build a custom course from it
           </p>
         </div>
-        <span className="ml-auto text-fuchsia-300">→</span>
+        <span style={{ color: "var(--accent)" }}>→</span>
       </Link>
 
-      <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-1 px-1">
+      <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-1 px-1 rise d2">
         {LADDER.filter((l) => !["university", "self"].includes(l.id)).map((l) => (
           <button
             key={l.id}
             onClick={() => setLevel(l.id)}
-            className={`chip whitespace-nowrap ${
-              level === l.id ? "bg-fuchsia-500/25 border-fuchsia-400/50" : ""
-            }`}
+            className={`chip whitespace-nowrap ${level === l.id ? "chip-on" : ""}`}
           >
             {l.emoji} {l.hint}
           </button>
         ))}
       </div>
 
-      <div className="grid grid-cols-2 gap-2.5">
+      <div className="grid grid-cols-2 gap-3 rise d2">
         {courses.map((c) => {
           const on = enrolled.has(c.id);
           return (
@@ -91,17 +89,14 @@ export default function Courses() {
               key={c.id}
               disabled={on || busy === c.id}
               onClick={() => enroll(c.id)}
-              className={`card p-4 text-left transition active:scale-[0.97] ${
-                on ? "opacity-70" : ""
-              }`}
+              className="card p-4 text-left transition hover:-translate-y-0.5 disabled:hover:translate-y-0"
             >
-              <div className="text-3xl">{c.emoji}</div>
-              <p className="font-bold text-sm mt-1.5 leading-tight">{c.subject}</p>
-              <p className="text-[10px] text-slate-400">{c.board}</p>
+              <div className="text-2xl">{c.emoji}</div>
+              <p className="font-semibold text-sm mt-2 leading-tight">{c.subject}</p>
+              <p className="eyebrow mt-0.5">{c.board}</p>
               <span
-                className={`inline-block mt-2 text-[11px] font-bold ${
-                  on ? "text-emerald-300" : "text-fuchsia-300"
-                }`}
+                className="inline-block mt-2 text-[11px] font-bold"
+                style={{ color: on ? "var(--ink-faint)" : "var(--accent)" }}
               >
                 {busy === c.id ? "…" : on ? "✓ Added" : "+ Add"}
               </span>
