@@ -13,10 +13,13 @@ export async function POST(req: Request) {
 
   const { data: course } = await supabase
     .from("courses")
-    .select("subject")
+    .select("subject, board, level")
     .eq("id", courseId)
     .maybeSingle();
   const subject = course?.subject ?? "your subject";
+  const exam = course?.board
+    ? `${course.board} ${(course.level ?? "").toUpperCase().replace(/_/g, " ")}`.trim()
+    : "";
 
   // topic + difficulty from mastery (adaptive: weaker => easier)
   let topicName = "key concepts";
@@ -55,7 +58,7 @@ export async function POST(req: Request) {
   }
   const difficulty = score < 40 ? "easy" : score < 70 ? "medium" : "hard";
 
-  const questions = await genQuiz(subject, [topicName], null, 6, difficulty);
+  const questions = await genQuiz(subject, [topicName], null, 6, difficulty, exam);
   if (!questions.length) return Response.json({ error: "generation_failed" }, { status: 502 });
 
   const withTopic = questions.map((q) => ({ ...q, topic_id: tid }));

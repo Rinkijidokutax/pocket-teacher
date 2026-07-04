@@ -12,10 +12,13 @@ export async function POST(req: Request) {
   const { courseId } = (await req.json()) as { courseId: string };
   const { data: course } = await supabase
     .from("courses")
-    .select("subject")
+    .select("subject, board, level")
     .eq("id", courseId)
     .maybeSingle();
   const subject = course?.subject ?? "the subject";
+  const exam = course?.board
+    ? `${course.board} ${(course.level ?? "").toUpperCase().replace(/_/g, " ")}`.trim()
+    : "";
 
   const { data: topics } = await supabase
     .from("topics")
@@ -30,7 +33,7 @@ export async function POST(req: Request) {
   const step = Math.max(1, Math.floor(all.length / n));
   const picked = Array.from({ length: n }, (_, i) => all[Math.min(i * step, all.length - 1)]);
 
-  const qs = (await genDiagnostic(subject, picked.map((t) => t.name))).slice(0, 6);
+  const qs = (await genDiagnostic(subject, picked.map((t) => t.name), exam)).slice(0, 6);
   if (!qs.length) return Response.json({ ok: true, quizId: null, questions: [] });
 
   const questions = qs.map((q) => ({

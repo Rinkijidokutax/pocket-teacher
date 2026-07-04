@@ -47,6 +47,7 @@ export type MasteryRow = {
   attempts: number;
   interval_days: number;
   review_due: string | null;
+  last_reviewed: string | null;
   misconceptions: string[];
   topics: { name: string; unit: string; course_id: string } | null;
 };
@@ -76,7 +77,7 @@ export async function loadMastery(
   let q = supabase
     .from("mastery")
     .select(
-      "topic_id, score, attempts, interval_days, review_due, misconceptions, topics(name, unit, course_id)"
+      "topic_id, score, attempts, interval_days, review_due, last_reviewed, misconceptions, topics(name, unit, course_id)"
     )
     .eq("user_id", userId)
     .order("score", { ascending: true });
@@ -166,6 +167,13 @@ export function systemPrompt(
   const misconceptions = mastery
     .flatMap((m) => (m.misconceptions ?? []).map((x) => `${m.topics?.name}: ${x}`))
     .slice(0, 6);
+  // Cross-session memory: what the student has actually been practising lately, newest first.
+  const recent = mastery
+    .filter((m) => m.attempts > 0 && m.last_reviewed)
+    .sort((a, b) => (a.last_reviewed! < b.last_reviewed! ? 1 : -1))
+    .slice(0, 4)
+    .map((m) => m.topics?.name)
+    .filter(Boolean);
   const daysToExam = course?.exam_date
     ? Math.ceil((new Date(course.exam_date).getTime() - Date.now()) / 86400000)
     : null;
@@ -189,6 +197,7 @@ ${surveyLines(profile)}
 
 Weakest topics (spend time here): ${weakest.join("; ") || "unknown yet — find out by asking a question"}
 Known misconceptions to revisit: ${misconceptions.join("; ") || "none recorded"}
+Recently practised (build on these; you remember working on them): ${recent.join(", ") || "nothing yet — this looks like an early session"}
 
 TODAY'S AGENDA:
 ${agenda.review.length ? `1. Quick spaced-repetition review: ${agenda.review.map((r) => `${r.name} [id: ${r.topic_id}]`).join(", ")} — one short question each.` : ""}

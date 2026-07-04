@@ -73,10 +73,14 @@ export async function genQuiz(
   topics: string[],
   source: string | null,
   count = 6,
-  difficulty = "mixed"
+  difficulty = "mixed",
+  exam = ""
 ): Promise<QuizQ[]> {
+  const examLine = exam
+    ? ` Write them in the real ${exam} exam style — use the exam's command words (State, Define, Describe, Explain, Calculate, Evaluate) and mark-scheme-level precision.`
+    : "";
   const txt = await ask(
-    `Write ${count} exam-style multiple-choice questions for a Mauritius ${subject} student on: ${topics.join(", ")}. Difficulty: ${difficulty}. Four options each, one correct, plausible distractors.${
+    `Write ${count} exam-style multiple-choice questions for a Mauritius ${subject} student on: ${topics.join(", ")}. Difficulty: ${difficulty}.${examLine} Four options each, one correct, plausible distractors.${
       source ? `\n\nGround them in the student's notes:\n${source.slice(0, 6000)}` : ""
     }\n\nEvery option must be a REAL, fully written-out answer — never just the letter. Output each question as a block in EXACTLY this format, one blank line between blocks, no other text:\nQ: <question>\nA) <option>\nB) <option>\nC) <option>\nD) <option>\nCORRECT: <A, B, C or D>\nWHY: <one short sentence explaining why the correct answer is right>\n\nExample:\nQ: Which gas do plants absorb during photosynthesis?\nA) Oxygen\nB) Carbon dioxide\nC) Nitrogen\nD) Hydrogen\nCORRECT: B\nWHY: Plants take in carbon dioxide and release oxygen during photosynthesis.`,
     2600
@@ -102,9 +106,14 @@ export async function genSummary(
 }
 
 export type DiagQ = { q: string; options: string[]; answer: number; topicIndex: number };
-export async function genDiagnostic(subject: string, topics: string[]): Promise<DiagQ[]> {
+export async function genDiagnostic(
+  subject: string,
+  topics: string[],
+  exam = ""
+): Promise<DiagQ[]> {
   const list = topics.map((t, i) => `${i}: ${t}`).join("\n");
-  const prompt = `Write ONE multiple-choice question for EACH of these ${subject} topics, to gauge a Mauritius student's level. Four options each, one correct.\n\nTopics:\n${list}\n\nEvery option must be a REAL, fully written-out answer — never just the letter. Output each as a block in EXACTLY this format, one blank line between blocks, no other text:\nQ: <question>\nA) <option>\nB) <option>\nC) <option>\nD) <option>\nCORRECT: <A, B, C or D>\nTOPIC: <the topic number>\n\nExample:\nQ: Which gas do plants absorb during photosynthesis?\nA) Oxygen\nB) Carbon dioxide\nC) Nitrogen\nD) Hydrogen\nCORRECT: B\nTOPIC: 0`;
+  const examLine = exam ? ` Use the real ${exam} exam style and its command words.` : "";
+  const prompt = `Write ONE multiple-choice question for EACH of these ${subject} topics, to gauge a Mauritius student's level. Four options each, one correct.${examLine}\n\nTopics:\n${list}\n\nEvery option must be a REAL, fully written-out answer — never just the letter. Output each as a block in EXACTLY this format, one blank line between blocks, no other text:\nQ: <question>\nA) <option>\nB) <option>\nC) <option>\nD) <option>\nCORRECT: <A, B, C or D>\nTOPIC: <the topic number>\n\nExample:\nQ: Which gas do plants absorb during photosynthesis?\nA) Oxygen\nB) Carbon dioxide\nC) Nitrogen\nD) Hydrogen\nCORRECT: B\nTOPIC: 0`;
   // Single call — no retry. The diagnostic is optional and low-stakes (seeds a baseline),
   // and a second AI call risked doubling latency into a multi-minute wait.
   const parsed = parseQuizBlocks(await ask(prompt, 2600), true);
