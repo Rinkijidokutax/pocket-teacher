@@ -31,6 +31,13 @@ export async function POST(req: Request) {
   };
 
   // free-tier daily cap
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("name, level, language, streak, last_study_date, xp, goal, survey, premium")
+    .eq("id", user.id)
+    .single();
+  if (!profile) return Response.json({ error: "no_profile" }, { status: 400 });
+
   const { data: usage } = await supabase
     .from("usage")
     .select("messages")
@@ -38,18 +45,11 @@ export async function POST(req: Request) {
     .eq("day", today())
     .maybeSingle();
   const used = usage?.messages ?? 0;
-  if (used >= FREE_DAILY_MESSAGES)
+  if (!profile.premium && used >= FREE_DAILY_MESSAGES)
     return Response.json({ error: "daily_limit", used }, { status: 402 });
   await supabase
     .from("usage")
     .upsert({ user_id: user.id, day: today(), messages: used + 1 });
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("name, level, language, streak, last_study_date, xp, goal, survey")
-    .eq("id", user.id)
-    .single();
-  if (!profile) return Response.json({ error: "no_profile" }, { status: 400 });
 
   // resolve the active course: explicit, else session's, else first enrollment
   let activeCourse = courseId ?? null;

@@ -17,6 +17,8 @@ export default function Session() {
   const [subject, setSubject] = useState("");
   const [down, setDown] = useState(false);
   const [notified, setNotified] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const photoRef = useRef<HTMLInputElement>(null);
   const sessionIdRef = useRef<string | null>(null);
   const courseRef = useRef<string | null>(null);
   const startedRef = useRef(false);
@@ -122,6 +124,48 @@ export default function Session() {
     }).catch(() => {});
   }
 
+  // Snap a problem: photo -> read it -> send it to the tutor to solve in-flow.
+  async function onPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || photoBusy || streaming) return;
+    setPhotoBusy(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const path = `${user.id}/${crypto.randomUUID()}-${file.name}`;
+      const { error: upErr } = await supabase.storage.from("materials").upload(path, file);
+      if (upErr) throw upErr;
+      const { data: mat } = await supabase
+        .from("materials")
+        .insert({ user_id: user.id, kind: "image", filename: file.name, storage_path: path })
+        .select("id")
+        .single();
+      if (!mat) throw new Error("save failed");
+      await fetch("/api/materials/process", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ materialId: mat.id }),
+      });
+      const { data: m2 } = await supabase
+        .from("materials")
+        .select("extracted_text, status")
+        .eq("id", mat.id)
+        .single();
+      setPhotoBusy(false);
+      if (m2?.status === "ready" && m2.extracted_text) {
+        send(`I took a photo of a problem I'm stuck on:\n\n${m2.extracted_text}\n\nCan you help me solve it step by step?`);
+      } else {
+        setMessages((m) => [
+          ...m,
+          { role: "assistant", content: "I couldn't read that photo clearly — try typing the question and I'll help." },
+        ]);
+      }
+    } catch {
+      setPhotoBusy(false);
+    }
+    if (photoRef.current) photoRef.current.value = "";
+  }
+
   function submit(e: React.FormEvent) {
     e.preventDefault();
     const text = input.trim();
@@ -182,12 +226,14 @@ export default function Session() {
           </div>
         ))}
         {capped && (
-          <div className="card p-4 text-sm" style={{ borderColor: "var(--streak)" }}>
+          <div className="card p-5 text-sm" style={{ borderColor: "var(--streak)" }}>
             <p className="font-semibold mb-1">That&apos;s your free lessons for today 🎉</p>
             <p className="text-[color:var(--ink-soft)]">
-              Come back tomorrow to keep your streak — or upgrade for unlimited teaching
-              (coming soon).
+              Come back tomorrow to keep your streak — or go Premium for unlimited teaching.
             </p>
+            <button onClick={() => router.push("/upgrade")} className="btn-accent w-full mt-3">
+              Go Premium →
+            </button>
           </div>
         )}
         {down && (
@@ -213,8 +259,34 @@ export default function Session() {
       <form onSubmit={submit} className="fixed bottom-14 inset-x-0 max-w-md mx-auto px-4 pb-3">
         <div className="flex gap-2 card p-1.5 items-center">
           <input
-            className="flex-1 bg-transparent outline-none px-3 text-sm"
-            placeholder={down ? "Teacher unavailable" : capped ? "See you tomorrow!" : "Type your answer…"}
+            ref={photoRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={onPhoto}
+            className="hidden"
+            id="snap"
+          />
+          <label
+            htmlFor="snap"
+            title="Snap a problem"
+            className={`px-2 text-xl cursor-pointer select-none ${
+              capped || streaming || down || photoBusy ? "opacity-40 pointer-events-none" : ""
+            }`}
+          >
+            {photoBusy ? "⏳" : "📷"}
+          </label>
+          <input
+            className="flex-1 bg-transparent outline-none px-1 text-sm"
+            placeholder={
+              photoBusy
+                ? "Reading your photo…"
+                : down
+                  ? "Teacher unavailable"
+                  : capped
+                    ? "See you tomorrow!"
+                    : "Type your answer…"
+            }
             value={input}
             onChange={(e) => setInput(e.target.value)}
             disabled={capped || streaming || down}

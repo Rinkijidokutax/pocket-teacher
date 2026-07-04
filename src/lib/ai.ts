@@ -15,3 +15,8 @@ export const anthropic = direct
 export const MODEL = direct
   ? "claude-sonnet-5"
   : process.env.TUTOR_MODEL || "openrouter/free";
+
+// Vision (reading photos) needs a multimodal model.
+export const VISION_MODEL = direct
+  ? "claude-sonnet-5"
+  : process.env.VISION_MODEL || "google/gemma-4-31b-it:free";

@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
-import { anthropic, MODEL } from "@/lib/ai";
+import { anthropic, MODEL, VISION_MODEL } from "@/lib/ai";
 
 export const maxDuration = 120;
 
@@ -18,7 +18,7 @@ async function extractText(
         ? "image/jpeg"
         : "image/webp";
     const res = await anthropic.messages.create({
-      model: MODEL,
+      model: VISION_MODEL,
       max_tokens: 1500,
       messages: [
         {

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import Nav from "@/components/Nav";
 import XpHeader from "@/components/XpHeader";
+import RemindersButton from "@/components/RemindersButton";
 
 type Enrolled = {
   course_id: string;
@@ -14,7 +15,12 @@ type Enrolled = {
 
 export default function Home() {
   const router = useRouter();
-  const [profile, setProfile] = useState<{ name: string; xp: number; streak: number } | null>(null);
+  const [profile, setProfile] = useState<{
+    name: string;
+    xp: number;
+    streak: number;
+    reminders: boolean;
+  } | null>(null);
   const [courses, setCourses] = useState<Enrolled[]>([]);
   const [loaded, setLoaded] = useState(false);
 
@@ -24,11 +30,16 @@ export default function Home() {
       if (!user) return router.replace("/login");
       const { data: p } = await supabase
         .from("profiles")
-        .select("name, xp, streak, onboarded")
+        .select("name, xp, streak, onboarded, reminders")
         .eq("id", user.id)
         .maybeSingle();
       if (!p?.onboarded) return router.replace("/onboarding");
-      setProfile({ name: p.name?.split(" ")[0] ?? "there", xp: p.xp ?? 0, streak: p.streak ?? 0 });
+      setProfile({
+        name: p.name?.split(" ")[0] ?? "there",
+        xp: p.xp ?? 0,
+        streak: p.streak ?? 0,
+        reminders: !!p.reminders,
+      });
       const { data: e } = await supabase
         .from("enrollments")
         .select("course_id, exam_date, courses(subject, emoji, level, board)")
@@ -74,6 +85,12 @@ export default function Home() {
           <span className="text-xl mr-1">{first.courses?.emoji}</span>
           Continue {first.courses?.subject} →
         </Link>
+      )}
+
+      {courses.length > 0 && (
+        <div className="rise d1">
+          <RemindersButton enabled={profile.reminders} />
+        </div>
       )}
 
       <section className="rise d2">
