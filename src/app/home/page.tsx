@@ -22,6 +22,10 @@ export default function Home() {
     reminders: boolean;
   } | null>(null);
   const [courses, setCourses] = useState<Enrolled[]>([]);
+  const [due, setDue] = useState<{ reviews: number; tasks: { id: string; title: string }[] }>({
+    reviews: 0,
+    tasks: [],
+  });
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -46,6 +50,29 @@ export default function Home() {
         .eq("user_id", user.id)
         .order("created_at", { ascending: true });
       setCourses((e ?? []) as unknown as Enrolled[]);
+
+      // What's due TODAY — spaced-repetition reviews + scheduled plan tasks.
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const [{ data: dueM }, { data: dueT }] = await Promise.all([
+        supabase
+          .from("mastery")
+          .select("topic_id")
+          .eq("user_id", user.id)
+          .lte("review_due", todayStr)
+          .gt("attempts", 0),
+        supabase
+          .from("study_tasks")
+          .select("id, title")
+          .eq("user_id", user.id)
+          .lte("due", todayStr)
+          .eq("done", false)
+          .order("due")
+          .limit(3),
+      ]);
+      setDue({
+        reviews: dueM?.length ?? 0,
+        tasks: (dueT ?? []) as { id: string; title: string }[],
+      });
       setLoaded(true);
     })();
   }, [router]);
@@ -85,6 +112,37 @@ export default function Home() {
           <span className="text-xl mr-1">{first.courses?.emoji}</span>
           Continue {first.courses?.subject} →
         </Link>
+      )}
+
+      {(due.reviews > 0 || due.tasks.length > 0) && first && (
+        <section className="rise d1">
+          <p className="eyebrow mb-2">Today</p>
+          <div className="flex flex-col gap-2">
+            {due.reviews > 0 && (
+              <Link
+                href={`/session?course=${first.course_id}`}
+                className="card px-4 py-3 flex items-center gap-3"
+              >
+                <span className="text-xl">🔁</span>
+                <span className="text-sm flex-1 font-semibold">
+                  {due.reviews} topic{due.reviews > 1 ? "s" : ""} ready to review
+                </span>
+                <span className="text-[color:var(--ink-faint)]">→</span>
+              </Link>
+            )}
+            {due.tasks.map((t) => (
+              <Link
+                key={t.id}
+                href="/study"
+                className="card px-4 py-3 flex items-center gap-3"
+              >
+                <span className="w-5 h-5 rounded-full border-2 border-[color:var(--line-strong)]" />
+                <span className="text-sm flex-1">{t.title}</span>
+                <span className="text-[color:var(--ink-faint)]">→</span>
+              </Link>
+            ))}
+          </div>
+        </section>
       )}
 
       {courses.length > 0 && (
