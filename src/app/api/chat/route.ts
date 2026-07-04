@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
-import { anthropic, MODEL, TOOL_MODEL } from "@/lib/ai";
+import { anthropic, MODEL } from "@/lib/ai";
 import {
   loadMastery,
   buildAgenda,
@@ -171,7 +171,10 @@ export async function POST(req: Request) {
             // thinking is Anthropic-only; free OpenRouter models reject it
             ...(MODEL.startsWith("claude") ? { thinking: { type: "disabled" as const } } : {}),
             system,
-            tools: [MASTERY_TOOL],
+            // Only give the tutor the tool on Claude (which calls it inline cleanly).
+            // Free models mishandle the tool schema mid-conversation and corrupt —
+            // for them mastery is recorded by the forced classifier below instead.
+            ...(MODEL.startsWith("claude") ? { tools: [MASTERY_TOOL] } : {}),
             messages: msgs,
           });
           msgStream.on("text", (delta) => {
@@ -203,18 +206,13 @@ export async function POST(req: Request) {
             { role: "user", content: toolResults },
           ];
         }
-        // Fallback: if the model didn't record mastery inline but the student sent an
-        // attempt, run a cheap forced-tool classification so adaptation still works.
+        // If the model didn't record mastery inline (free models don't), judge the
+        // attempt deterministically from the tutor's own verdict + the focus topic.
         if (message && masteryApplied === 0) {
           xpEarned += await classifyAttempt(
-            anthropic,
-            TOOL_MODEL,
             supabase,
             user.id,
-            mastery.slice(0, 8).map((m) => ({
-              topic_id: m.topic_id,
-              name: m.topics?.name ?? m.topic_id,
-            })),
+            agenda.focus?.topic_id ?? mastery[0]?.topic_id ?? null,
             message,
             assistantText
           );

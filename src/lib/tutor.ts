@@ -211,66 +211,31 @@ export const MASTERY_TOOL = {
   },
 };
 
-// Fallback for weaker models that won't volunteer the tool mid-conversation:
-// a cheap forced-tool classification of the student's last attempt.
+// Deterministic mastery recording — no extra LLM call (free-tier tool calls are too
+// unreliable). The tutor's own reply tells us if the student was right; the student's
+// message tells us whether they attempted. Applied to the topic being worked on.
+const POSITIVE =
+  /\b(correct|exactly|well done|great job|good job|perfect|spot on|nicely|that'?s right|you got it|precisely|brilliant)\b|✓|👏|🎉|💯/i;
+const NEGATIVE =
+  /\b(not quite|almost|not correct|isn'?t right|not right|that'?s not|incorrect|careful|check again|try again|let'?s re|mistake|oops|close,? but|small (slip|error))\b/i;
+
+export function looksLikeAttempt(studentMsg: string): boolean {
+  if (studentMsg.length > 500) return false;
+  return /[0-9=]|\bx\s*=|\banswer|\bi (?:think|got|get)\b|\bso\b/i.test(studentMsg);
+}
+
 export async function classifyAttempt(
-  client: Anthropic,
-  model: string,
   supabase: SupabaseClient,
   userId: string,
-  topics: { topic_id: string; name: string }[],
+  topicId: string | null,
   studentMsg: string,
   tutorReply: string
 ): Promise<number> {
-  if (!topics.length) return 0;
-  const list = topics.map((t) => `${t.name} [id: ${t.topic_id}]`).join("; ");
-  try {
-    const res = await client.messages.create({
-      model,
-      max_tokens: 200,
-      tools: [
-        {
-          name: "update_mastery",
-          description: "Record whether the student's last message was a correct attempt.",
-          input_schema: {
-            type: "object" as const,
-            properties: {
-              attempted: {
-                type: "boolean",
-                description: "true ONLY if the student was answering/attempting a question",
-              },
-              topic_id: { type: "string", description: "closest matching topic id from the list" },
-              gotIt: { type: "boolean" },
-              misconception: { type: "string" },
-            },
-            required: ["attempted", "topic_id", "gotIt"],
-          },
-        },
-      ],
-      tool_choice: { type: "tool", name: "update_mastery" },
-      messages: [
-        {
-          role: "user",
-          content: `Available topics: ${list}\n\nStudent's last message: "${studentMsg}"\nTutor's reply: "${tutorReply.slice(0, 600)}"\n\nWas the student's message an attempt at answering a question in this subject? If yes, judge whether they got it right and pick the closest topic id. If it was just chatting or asking a question, set attempted=false.`,
-        },
-      ],
-    });
-    const call = res.content.find((b) => b.type === "tool_use") as
-      | Anthropic.ToolUseBlock
-      | undefined;
-    const inp = call?.input as
-      | { attempted?: boolean; topic_id?: string; gotIt?: boolean; misconception?: string }
-      | undefined;
-    if (!inp?.attempted || !inp.topic_id) return 0;
-    return applyMasteryUpdate(supabase, userId, {
-      topic_id: inp.topic_id,
-      gotIt: !!inp.gotIt,
-      misconception: inp.misconception,
-    });
-  } catch (e) {
-    console.warn("classifyAttempt failed", e);
-    return 0;
-  }
+  if (!topicId || !looksLikeAttempt(studentMsg)) return 0;
+  const pos = POSITIVE.test(tutorReply);
+  const neg = NEGATIVE.test(tutorReply);
+  if (!pos && !neg) return 0; // tutor gave no clear verdict — don't guess
+  return applyMasteryUpdate(supabase, userId, { topic_id: topicId, gotIt: pos && !neg });
 }
 
 // Applies an update and returns XP earned for it.

@@ -1,6 +1,6 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
-import { anthropic, TOOL_MODEL, VISION_MODEL } from "@/lib/ai";
+import { anthropic, VISION_MODEL } from "@/lib/ai";
+import { genSyllabus } from "@/lib/study";
 
 export const maxDuration = 120;
 
@@ -47,37 +47,6 @@ async function extractText(
   return Buffer.from(bytes).toString("utf8");
 }
 
-const SYLLABUS_TOOL = {
-  name: "save_syllabus",
-  description: "Save the structured topic tree extracted from a syllabus.",
-  input_schema: {
-    type: "object" as const,
-    properties: {
-      subject: { type: "string", description: "the subject name, e.g. Mathematics" },
-      level: {
-        type: "string",
-        description:
-          "one of: primary, nce, o_level, hsc, university, self — best guess from the content",
-      },
-      board: { type: "string", description: "exam board if stated, else 'Custom'" },
-      emoji: { type: "string", description: "one emoji representing the subject" },
-      topics: {
-        type: "array",
-        description: "flat list of topics in syllabus order",
-        items: {
-          type: "object",
-          properties: {
-            unit: { type: "string" },
-            name: { type: "string" },
-          },
-          required: ["unit", "name"],
-        },
-      },
-    },
-    required: ["subject", "level", "topics"],
-  },
-};
-
 export async function POST(req: Request) {
   const supabase = await createClient();
   const {
@@ -103,24 +72,7 @@ export async function POST(req: Request) {
     const text = (await extractText(mat.kind, mat.filename, bytes)).slice(0, 40000);
 
     if (mat.kind === "syllabus") {
-      const res = await anthropic.messages.create({
-        model: TOOL_MODEL,
-        max_tokens: 3200, // ponytail: ~100 topics; huge syllabi may truncate — raise if needed
-        tools: [SYLLABUS_TOOL],
-        tool_choice: { type: "tool", name: "save_syllabus" },
-        messages: [
-          {
-            role: "user",
-            content: `Here is a course syllabus. Extract its topic tree — every teachable topic, grouped into units, in order. If a topic list is sparse, expand it into the standard topics a student at that level would need.\n\n${text}`,
-          },
-        ],
-      });
-      const call = res.content.find((b) => b.type === "tool_use") as
-        | Anthropic.ToolUseBlock
-        | undefined;
-      const parsed = call?.input as
-        | { subject: string; level: string; board?: string; emoji?: string; topics: { unit: string; name: string }[] }
-        | undefined;
+      const parsed = await genSyllabus(text);
       if (!parsed?.topics?.length) throw new Error("no topics extracted");
 
       const { data: course } = await supabase
