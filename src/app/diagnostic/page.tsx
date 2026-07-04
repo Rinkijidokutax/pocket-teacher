@@ -35,19 +35,30 @@ export default function Diagnostic() {
   async function loadFor(courseId: string) {
     setLoading(true);
     setQuizId(null);
-    const res = await fetch("/api/diagnostic", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ courseId }),
-    });
-    const out = await res.json().catch(() => ({}));
-    setLoading(false);
-    if (out.quizId && out.questions?.length) {
-      setQuizId(out.quizId);
-      setQuestions(out.questions);
-      setAnswers(new Array(out.questions.length).fill(-1));
-    } else {
-      next(); // generation failed — skip this subject
+    // Never hang on a slow subject — cap each at 30s, then skip it.
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 30000);
+    try {
+      const res = await fetch("/api/diagnostic", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseId }),
+        signal: ctrl.signal,
+      });
+      const out = await res.json().catch(() => ({}));
+      clearTimeout(to);
+      setLoading(false);
+      if (out.quizId && out.questions?.length) {
+        setQuizId(out.quizId);
+        setQuestions(out.questions);
+        setAnswers(new Array(out.questions.length).fill(-1));
+      } else {
+        next(); // generation failed — skip this subject
+      }
+    } catch {
+      clearTimeout(to);
+      setLoading(false);
+      next(); // timed out or errored — skip rather than hang
     }
   }
 

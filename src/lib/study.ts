@@ -113,10 +113,9 @@ export type DiagQ = { q: string; options: string[]; answer: number; topicIndex: 
 export async function genDiagnostic(subject: string, topics: string[]): Promise<DiagQ[]> {
   const list = topics.map((t, i) => `${i}: ${t}`).join("\n");
   const prompt = `Write ONE multiple-choice question for EACH of these ${subject} topics, to gauge a Mauritius student's level. Four options each, one correct.\n\nTopics:\n${list}\n\nEvery option must be a REAL, fully written-out answer — never just the letter. Output each as a block in EXACTLY this format, one blank line between blocks, no other text:\nQ: <question>\nA) <option>\nB) <option>\nC) <option>\nD) <option>\nCORRECT: <A, B, C or D>\nTOPIC: <the topic number>\n\nExample:\nQ: Which gas do plants absorb during photosynthesis?\nA) Oxygen\nB) Carbon dioxide\nC) Nitrogen\nD) Hydrogen\nCORRECT: B\nTOPIC: 0`;
-  let parsed = parseQuizBlocks(await ask(prompt, 2600), true);
-  // Free models sometimes emit placeholder options that the guard drops — retry once.
-  if (parsed.length < Math.min(3, topics.length))
-    parsed = parseQuizBlocks(await ask(prompt, 2600), true);
+  // Single call — no retry. The diagnostic is optional and low-stakes (seeds a baseline),
+  // and a second AI call risked doubling latency into a multi-minute wait.
+  const parsed = parseQuizBlocks(await ask(prompt, 2600), true);
   return parsed.map((q) => ({
     q: q.q,
     options: q.options,

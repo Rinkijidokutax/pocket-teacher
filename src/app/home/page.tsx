@@ -51,7 +51,11 @@ export default function Home() {
         .select("course_id, exam_date, courses(subject, emoji, level, board)")
         .eq("user_id", user.id)
         .order("created_at", { ascending: true });
-      setCourses((e ?? []) as unknown as Enrolled[]);
+      const en = (e ?? []) as unknown as Enrolled[];
+      // Anyone without subjects yet — including users who signed up before the questionnaire
+      // existed — goes through onboarding to map the subjects they need.
+      if (en.length === 0) return router.replace("/onboarding");
+      setCourses(en);
 
       // What's due TODAY — spaced-repetition reviews + scheduled plan tasks.
       const todayStr = new Date().toISOString().slice(0, 10);

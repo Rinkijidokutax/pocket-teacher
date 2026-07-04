@@ -104,7 +104,10 @@ export default function Onboarding() {
         })
       )
     );
-    router.replace("/diagnostic");
+    // Straight to the app — don't block first value behind a multi-subject AI diagnostic
+    // (that could take minutes on the free model). Mastery seeds at baseline and the tutor
+    // adapts from the first lesson; a quick level-check stays available optionally.
+    router.replace("/home");
   }
 
   const canNext =
