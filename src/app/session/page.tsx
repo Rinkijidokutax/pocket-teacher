@@ -9,6 +9,30 @@ type Msg = { role: "user" | "assistant"; content: string };
 // Free models emit markdown despite instructions, and occasionally editorialise about the
 // silent mastery marker. Strip both so students see clean, plain text (the design uses no
 // markdown). Applied at render, so it also cleans partial text mid-stream.
+// Resize/compress a camera photo before upload — students on slow mobile networks
+// shouldn't wait to push a 4MB snapshot when ~300KB reads just as well for OCR.
+async function compressImage(file: File): Promise<File> {
+  if (!file.type.startsWith("image/")) return file;
+  try {
+    const bitmap = await createImageBitmap(file);
+    const max = 1600;
+    const scale = Math.min(1, max / Math.max(bitmap.width, bitmap.height));
+    const w = Math.round(bitmap.width * scale);
+    const h = Math.round(bitmap.height * scale);
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return file;
+    ctx.drawImage(bitmap, 0, 0, w, h);
+    const blob: Blob | null = await new Promise((r) => canvas.toBlob(r, "image/jpeg", 0.7));
+    if (!blob || blob.size >= file.size) return file;
+    return new File([blob], file.name.replace(/\.\w+$/, "") + ".jpg", { type: "image/jpeg" });
+  } catch {
+    return file;
+  }
+}
+
 function clean(t: string): string {
   return t
     .replace(/\*?\(\s*(?:note|nb)[^)]*mastery[^)]*\)\*?/gi, "")
@@ -139,12 +163,13 @@ export default function Session() {
 
   // Snap a problem: photo -> read it -> send it to the tutor to solve in-flow.
   async function onPhoto(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file || photoBusy || streaming) return;
+    const raw = e.target.files?.[0];
+    if (!raw || photoBusy || streaming) return;
     setPhotoBusy(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+      const file = await compressImage(raw);
       const path = `${user.id}/${crypto.randomUUID()}-${file.name}`;
       const { error: upErr } = await supabase.storage.from("materials").upload(path, file);
       if (upErr) throw upErr;
