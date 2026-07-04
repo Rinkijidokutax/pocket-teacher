@@ -163,7 +163,24 @@ export async function POST(req: Request) {
   // Stream to the student but never emit a mastery marker. Hold back everything from the
   // first "[[" onward until we can strip complete markers at the end.
   let flushedLen = 0;
+  let dropPrefix = 0;
+  // Free models re-greet on continuing turns despite instructions. Gate the first line so
+  // a stray "Hi <name>!" is dropped deterministically (only on non-first turns).
+  let greetChecked = firstTurn;
   const flush = (controller: ReadableStreamDefaultController, final: boolean) => {
+    if (!greetChecked) {
+      const nl = assistantText.indexOf("\n");
+      if (nl === -1 && !final) return; // wait for the first line before deciding
+      const firstLine = (nl === -1 ? assistantText : assistantText.slice(0, nl)).trim();
+      if (
+        firstLine.length < 90 &&
+        /^(hi|hello|hey|bonjour|salut|good (morning|afternoon|evening|day))\b/i.test(firstLine)
+      ) {
+        dropPrefix = nl === -1 ? assistantText.length : nl + 1;
+        flushedLen = dropPrefix;
+      }
+      greetChecked = true;
+    }
     if (final) {
       const tail = stripMasteryMarkers(assistantText.slice(flushedLen));
       if (tail) controller.enqueue(encoder.encode(tail));
@@ -234,7 +251,7 @@ export async function POST(req: Request) {
             xpEarned += await applyMasteryUpdate(supabase, user.id, mk);
           }
         }
-        const cleanText = stripMasteryMarkers(assistantText).trim();
+        const cleanText = stripMasteryMarkers(assistantText.slice(dropPrefix)).trim();
         if (cleanText)
           await supabase.from("messages").insert({
             session_id: sid,

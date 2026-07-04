@@ -6,6 +6,18 @@ import Nav from "@/components/Nav";
 
 type Msg = { role: "user" | "assistant"; content: string };
 
+// Free models emit markdown despite instructions, and occasionally editorialise about the
+// silent mastery marker. Strip both so students see clean, plain text (the design uses no
+// markdown). Applied at render, so it also cleans partial text mid-stream.
+function clean(t: string): string {
+  return t
+    .replace(/\*?\(\s*(?:note|nb)[^)]*mastery[^)]*\)\*?/gi, "")
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/(?<![\w*])\*(?=\S)([^*\n]+?)(?<=\S)\*(?![\w*])/g, "$1")
+    .replace(/^#{1,6}\s+/gm, "")
+    .trimEnd();
+}
+
 export default function Session() {
   const router = useRouter();
   const [messages, setMessages] = useState<Msg[]>([]);
@@ -214,7 +226,9 @@ export default function Session() {
             }`}
             style={m.role === "user" ? { background: "var(--ink)" } : undefined}
           >
-            {m.content || (
+            {m.content ? (
+              clean(m.content)
+            ) : (
               <span className="inline-flex gap-1 py-1">
                 {[0, 0.15, 0.3].map((d) => (
                   <span
