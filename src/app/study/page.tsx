@@ -15,6 +15,7 @@ export default function Study() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [summary, setSummary] = useState<{ title: string; content: string } | null>(null);
   const [busy, setBusy] = useState<string>("");
+  const [err, setErr] = useState<string>("");
 
   useEffect(() => {
     (async () => {
@@ -47,6 +48,7 @@ export default function Study() {
   async function makeSummary() {
     setBusy("summary");
     setSummary(null);
+    setErr("");
     const res = await fetch("/api/summary", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -55,17 +57,26 @@ export default function Study() {
     const out = await res.json().catch(() => ({}));
     setBusy("");
     if (out.summary) setSummary(out.summary);
+    else setErr("Couldn’t write a summary just now — give it another tap.");
   }
 
   async function buildPlan() {
     setBusy("plan");
-    await fetch("/api/plan/generate", {
+    setErr("");
+    const res = await fetch("/api/plan/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ courseId: active }),
     });
+    const out = await res.json().catch(() => ({}));
     setBusy("");
-    router.push(`/plan?course=${active}`);
+    if (res.ok && (out.created ?? 0) > 0) {
+      router.push(`/plan?course=${active}`);
+    } else if (out.error === "no_mastery") {
+      setErr("Do a quick lesson or quiz first — then I can plan your revision.");
+    } else {
+      setErr("Couldn’t build a plan just now — give it another tap.");
+    }
   }
 
   async function toggleTask(id: string, done: boolean) {
@@ -117,6 +128,12 @@ export default function Study() {
               </button>
             ))}
           </div>
+
+          {err && (
+            <p className="text-sm rise" style={{ color: "var(--streak)" }}>
+              {err}
+            </p>
+          )}
 
           {summary && (
             <div className="card p-5 rise">

@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { applyMasteryUpdate } from "@/lib/tutor";
+import { recordActivity } from "@/lib/activity";
 
 export async function POST(req: Request) {
   const supabase = await createClient();
@@ -27,11 +28,9 @@ export async function POST(req: Request) {
   // update mastery on the quiz's topic, award quiz XP
   if (quiz.topic_id)
     await applyMasteryUpdate(supabase, user.id, { topic_id: quiz.topic_id, gotIt: passed });
+  // Credit XP AND the daily streak — finishing a quiz counts toward the habit, not just chat.
   const xp = score * 3 + (passed ? 10 : 0);
-  if (xp) {
-    const { data: p } = await supabase.from("profiles").select("xp").eq("id", user.id).maybeSingle();
-    await supabase.from("profiles").update({ xp: (p?.xp ?? 0) + xp }).eq("id", user.id);
-  }
+  await recordActivity(supabase, user.id, xp);
 
   await supabase.from("quiz_attempts").insert({
     user_id: user.id,
