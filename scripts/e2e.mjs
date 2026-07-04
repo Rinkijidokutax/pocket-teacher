@@ -10,6 +10,7 @@ const env = Object.fromEntries(
     .map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)])
 );
 
+const BASE = process.env.BASE ?? "http://localhost:3000";
 const supabase = createClient(
   env.NEXT_PUBLIC_SUPABASE_URL,
   env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -35,7 +36,7 @@ if (value.length <= CHUNK) {
 const cookieHeader = cookies.join("; ");
 
 async function chat(sessionId, message) {
-  const res = await fetch("http://localhost:3000/api/chat", {
+  const res = await fetch(`${BASE}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Cookie: cookieHeader },
     body: JSON.stringify({ sessionId, message }),
