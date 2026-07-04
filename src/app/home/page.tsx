@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase/client";
 import Nav from "@/components/Nav";
 import XpHeader from "@/components/XpHeader";
 import RemindersButton from "@/components/RemindersButton";
+import { taskHref } from "@/lib/tasks";
 
 type Enrolled = {
   course_id: string;
@@ -25,7 +26,7 @@ export default function Home() {
   const [due, setDue] = useState<{
     reviews: number;
     cards: number;
-    tasks: { id: string; title: string }[];
+    tasks: { id: string; title: string; kind: string; topic_id: string | null; course_id: string }[];
   }>({ reviews: 0, cards: 0, tasks: [] });
   const [loaded, setLoaded] = useState(false);
 
@@ -68,7 +69,7 @@ export default function Home() {
           .lte("review_due", todayStr),
         supabase
           .from("study_tasks")
-          .select("id, title")
+          .select("id, title, kind, topic_id, course_id")
           .eq("user_id", user.id)
           .lte("due", todayStr)
           .eq("done", false)
@@ -78,7 +79,13 @@ export default function Home() {
       setDue({
         reviews: dueM?.length ?? 0,
         cards: dueC?.length ?? 0,
-        tasks: (dueT ?? []) as { id: string; title: string }[],
+        tasks: (dueT ?? []) as {
+          id: string;
+          title: string;
+          kind: string;
+          topic_id: string | null;
+          course_id: string;
+        }[],
       });
       setLoaded(true);
     })();
@@ -152,7 +159,7 @@ export default function Home() {
             {due.tasks.map((t) => (
               <Link
                 key={t.id}
-                href="/study"
+                href={taskHref(t.kind, t.course_id, t.topic_id)}
                 className="card px-4 py-3 flex items-center gap-3"
               >
                 <span className="w-5 h-5 rounded-full border-2 border-[color:var(--line-strong)]" />

@@ -1,12 +1,14 @@
 "use client";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
+import { taskHref } from "@/lib/tasks";
 import Nav from "@/components/Nav";
 import Pomodoro from "@/components/Pomodoro";
 
 type Course = { course_id: string; courses: { subject: string; emoji: string } | null };
-type Task = { id: string; title: string; kind: string; done: boolean; due: string };
+type Task = { id: string; title: string; kind: string; done: boolean; due: string; topic_id: string | null };
 
 export default function Study() {
   const router = useRouter();
@@ -39,7 +41,7 @@ export default function Study() {
     const today = new Date().toISOString().slice(0, 10);
     supabase
       .from("study_tasks")
-      .select("id, title, kind, done, due")
+      .select("id, title, kind, done, due, topic_id")
       .eq("course_id", active)
       .lte("due", today)
       .eq("done", false)
@@ -81,11 +83,6 @@ export default function Study() {
     }
   }
 
-  async function toggleTask(id: string, done: boolean) {
-    setTasks((t) => t.map((x) => (x.id === id ? { ...x, done } : x)));
-    await supabase.from("study_tasks").update({ done }).eq("id", id);
-    if (done) setTasks((t) => t.filter((x) => x.id !== id));
-  }
 
   const tiles = [
     { key: "summary", icon: "≣", label: "AI summary", sub: "Notes → revise-ready", onClick: makeSummary },
@@ -162,15 +159,15 @@ export default function Study() {
             ) : (
               <div className="flex flex-col gap-2">
                 {tasks.map((t) => (
-                  <button
+                  <Link
                     key={t.id}
-                    onClick={() => toggleTask(t.id, true)}
+                    href={taskHref(t.kind, active, t.topic_id)}
                     className="card px-4 py-3 flex items-center gap-3 text-left"
                   >
                     <span className="w-5 h-5 rounded-full border-2 border-[color:var(--line-strong)]" />
                     <span className="text-sm flex-1">{t.title}</span>
                     <span className="eyebrow">{t.kind}</span>
-                  </button>
+                  </Link>
                 ))}
               </div>
             )}

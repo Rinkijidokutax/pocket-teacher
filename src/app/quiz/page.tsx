@@ -24,13 +24,13 @@ export default function Quiz() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  async function generate(courseId: string) {
+  async function generate(courseId: string, topicId?: string) {
     setLoading(true);
     setResult(null);
     const res = await fetch("/api/quiz/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ courseId }),
+      body: JSON.stringify({ courseId, topicId }),
     });
     const out = await res.json().catch(() => ({}));
     setLoading(false);
@@ -46,9 +46,11 @@ export default function Quiz() {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return router.replace("/login");
-      const c = new URLSearchParams(window.location.search).get("course");
+      const params = new URLSearchParams(window.location.search);
+      const c = params.get("course");
+      const t = params.get("topic");
       setCourse(c);
-      if (c) generate(c);
+      if (c) generate(c, t ?? undefined);
       else setLoading(false);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps

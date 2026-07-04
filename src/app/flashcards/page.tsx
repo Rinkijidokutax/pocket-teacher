@@ -9,6 +9,7 @@ type Card = { id: string; front: string; back: string; interval_days: number; re
 export default function Flashcards() {
   const router = useRouter();
   const [course, setCourse] = useState<string | null>(null);
+  const [topic, setTopic] = useState<string | null>(null);
   const [cards, setCards] = useState<Card[]>([]);
   const [i, setI] = useState(0);
   const [flipped, setFlipped] = useState(false);
@@ -35,8 +36,10 @@ export default function Flashcards() {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return router.replace("/login");
-      const c = new URLSearchParams(window.location.search).get("course");
+      const params = new URLSearchParams(window.location.search);
+      const c = params.get("course");
       setCourse(c);
+      setTopic(params.get("topic"));
       if (c) load(c);
       else setLoading(false);
     })();
@@ -49,7 +52,7 @@ export default function Flashcards() {
     await fetch("/api/flashcards/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ courseId: course }),
+      body: JSON.stringify({ courseId: course, topicId: topic ?? undefined }),
     });
     await load(course);
     setBusy(false);

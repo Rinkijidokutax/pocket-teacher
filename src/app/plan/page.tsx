@@ -1,10 +1,19 @@
 "use client";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
+import { taskHref } from "@/lib/tasks";
 import Nav from "@/components/Nav";
 
-type Task = { id: string; title: string; kind: string; done: boolean; due: string };
+type Task = {
+  id: string;
+  title: string;
+  kind: string;
+  done: boolean;
+  due: string;
+  topic_id: string | null;
+};
 
 export default function Plan() {
   const router = useRouter();
@@ -15,7 +24,7 @@ export default function Plan() {
   async function load(courseId: string) {
     const { data } = await supabase
       .from("study_tasks")
-      .select("id, title, kind, done, due")
+      .select("id, title, kind, done, due, topic_id")
       .eq("course_id", courseId)
       .order("due");
     setTasks((data ?? []) as Task[]);
@@ -82,13 +91,11 @@ export default function Plan() {
                 <p className="eyebrow mb-1.5">{fmt(day)}</p>
                 <div className="flex flex-col gap-2">
                   {dayTasks.map((t) => (
-                    <button
-                      key={t.id}
-                      onClick={() => toggle(t.id, !t.done)}
-                      className="card px-4 py-3 flex items-center gap-3 text-left"
-                    >
-                      <span
-                        className="w-5 h-5 rounded-full border-2 flex items-center justify-center text-[11px]"
+                    <div key={t.id} className="card px-4 py-3 flex items-center gap-3">
+                      <button
+                        onClick={() => toggle(t.id, !t.done)}
+                        aria-label={t.done ? "Mark not done" : "Mark done"}
+                        className="w-5 h-5 rounded-full border-2 flex items-center justify-center text-[11px] shrink-0"
                         style={{
                           borderColor: t.done ? "var(--accent)" : "var(--line-strong)",
                           background: t.done ? "var(--accent)" : "transparent",
@@ -96,12 +103,15 @@ export default function Plan() {
                         }}
                       >
                         {t.done ? "✓" : ""}
-                      </span>
-                      <span className={`text-sm flex-1 ${t.done ? "line-through opacity-50" : ""}`}>
+                      </button>
+                      <Link
+                        href={taskHref(t.kind, course, t.topic_id)}
+                        className={`text-sm flex-1 ${t.done ? "line-through opacity-50" : ""}`}
+                      >
                         {t.title}
-                      </span>
+                      </Link>
                       <span className="eyebrow">{t.kind}</span>
-                    </button>
+                    </div>
                   ))}
                 </div>
               </div>
