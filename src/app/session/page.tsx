@@ -19,6 +19,7 @@ export default function Session() {
   const [notified, setNotified] = useState(false);
   const [photoBusy, setPhotoBusy] = useState(false);
   const photoRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const sessionIdRef = useRef<string | null>(null);
   const courseRef = useRef<string | null>(null);
   const startedRef = useRef(false);
@@ -171,6 +172,7 @@ export default function Session() {
     const text = input.trim();
     if (!text) return;
     setInput("");
+    if (inputRef.current) inputRef.current.style.height = "auto";
     send(text);
   }
 
@@ -257,7 +259,7 @@ export default function Session() {
       </div>
 
       <form onSubmit={submit} className="fixed bottom-14 inset-x-0 max-w-md mx-auto px-4 pb-3">
-        <div className="flex gap-2 card p-1.5 items-center">
+        <div className="flex gap-2 card p-1.5 items-end">
           <input
             ref={photoRef}
             type="file"
@@ -270,14 +272,16 @@ export default function Session() {
           <label
             htmlFor="snap"
             title="Snap a problem"
-            className={`px-2 text-xl cursor-pointer select-none ${
+            className={`px-2 text-xl cursor-pointer select-none self-center ${
               capped || streaming || down || photoBusy ? "opacity-40 pointer-events-none" : ""
             }`}
           >
             {photoBusy ? "⏳" : "📷"}
           </label>
-          <input
-            className="flex-1 bg-transparent outline-none px-1 text-sm"
+          <textarea
+            ref={inputRef}
+            rows={1}
+            className="flex-1 bg-transparent outline-none px-1 py-2 text-sm resize-none max-h-32 leading-relaxed"
             placeholder={
               photoBusy
                 ? "Reading your photo…"
@@ -285,10 +289,26 @@ export default function Session() {
                   ? "Teacher unavailable"
                   : capped
                     ? "See you tomorrow!"
-                    : "Type your answer…"
+                    : "Type your answer… (Enter for a new line)"
             }
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => {
+              setInput(e.target.value);
+              e.target.style.height = "auto";
+              e.target.style.height = Math.min(e.target.scrollHeight, 128) + "px";
+            }}
+            onKeyDown={(e) => {
+              // Enter adds a new line (essay answers); ⌘/Ctrl+Enter sends.
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                const text = input.trim();
+                if (text) {
+                  setInput("");
+                  e.currentTarget.style.height = "auto";
+                  send(text);
+                }
+              }
+            }}
             disabled={capped || streaming || down}
           />
           <button

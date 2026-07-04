@@ -7,7 +7,8 @@ import {
   systemPrompt,
   MASTERY_TOOL,
   applyMasteryUpdate,
-  classifyAttempt,
+  parseMasteryMarkers,
+  stripMasteryMarkers,
 } from "@/lib/tutor";
 import { XP } from "@/lib/levels";
 
@@ -146,7 +147,8 @@ export async function POST(req: Request) {
     .limit(60);
 
   const agenda = buildAgenda(mastery);
-  const system = systemPrompt(profile, courseCtx, agenda, mastery, materials ?? []);
+  const firstTurn = (history?.length ?? 0) === 0;
+  const system = systemPrompt(profile, courseCtx, agenda, mastery, materials ?? [], firstTurn);
 
   const apiMessages: Anthropic.MessageParam[] = [
     ...(history ?? []).map((m) => ({
@@ -158,6 +160,23 @@ export async function POST(req: Request) {
 
   const encoder = new TextEncoder();
   let assistantText = "";
+  // Stream to the student but never emit a mastery marker. Hold back everything from the
+  // first "[[" onward until we can strip complete markers at the end.
+  let flushedLen = 0;
+  const flush = (controller: ReadableStreamDefaultController, final: boolean) => {
+    if (final) {
+      const tail = stripMasteryMarkers(assistantText.slice(flushedLen));
+      if (tail) controller.enqueue(encoder.encode(tail));
+      flushedLen = assistantText.length;
+      return;
+    }
+    const open = assistantText.indexOf("[[", flushedLen);
+    const cut = open >= 0 ? open : assistantText.length;
+    if (cut > flushedLen) {
+      controller.enqueue(encoder.encode(assistantText.slice(flushedLen, cut)));
+      flushedLen = cut;
+    }
+  };
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -173,13 +192,13 @@ export async function POST(req: Request) {
             system,
             // Only give the tutor the tool on Claude (which calls it inline cleanly).
             // Free models mishandle the tool schema mid-conversation and corrupt —
-            // for them mastery is recorded by the forced classifier below instead.
+            // for them mastery is recorded by the [[MASTERY]] marker parsed below instead.
             ...(MODEL.startsWith("claude") ? { tools: [MASTERY_TOOL] } : {}),
             messages: msgs,
           });
           msgStream.on("text", (delta) => {
             assistantText += delta;
-            controller.enqueue(encoder.encode(delta));
+            flush(controller, false);
           });
           const final = await msgStream.finalMessage();
           if (final.stop_reason !== "tool_use") break;
@@ -206,23 +225,22 @@ export async function POST(req: Request) {
             { role: "user", content: toolResults },
           ];
         }
-        // If the model didn't record mastery inline (free models don't), judge the
-        // attempt deterministically from the tutor's own verdict + the focus topic.
+        // flush any held-back tail (markers stripped) to the student
+        flush(controller, true);
+        // Free models record mastery via the [[MASTERY ...]] marker; parse + apply it.
         if (message && masteryApplied === 0) {
-          xpEarned += await classifyAttempt(
-            supabase,
-            user.id,
-            agenda.focus?.topic_id ?? mastery[0]?.topic_id ?? null,
-            message,
-            assistantText
-          );
+          for (const mk of parseMasteryMarkers(assistantText)) {
+            masteryApplied++;
+            xpEarned += await applyMasteryUpdate(supabase, user.id, mk);
+          }
         }
-        if (assistantText)
+        const cleanText = stripMasteryMarkers(assistantText).trim();
+        if (cleanText)
           await supabase.from("messages").insert({
             session_id: sid,
             user_id: user.id,
             role: "assistant",
-            content: assistantText,
+            content: cleanText,
           });
         if (xpEarned)
           await supabase

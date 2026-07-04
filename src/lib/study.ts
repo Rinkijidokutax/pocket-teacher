@@ -39,6 +39,16 @@ export async function genFlashcards(
 }
 
 export type QuizQ = { q: string; options: string[]; answer: number; topicIndex?: number };
+
+// Reject degenerate options the free model sometimes emits (e.g. "A) A", "B) B") — a
+// single letter, blanks, or duplicates. Better to drop the question than show "A. A".
+function optionsOk(opts: string[]): boolean {
+  if (opts.length !== 4) return false;
+  const norm = opts.map((o) => o.trim().toLowerCase());
+  if (norm.some((o) => o.length < 2)) return false;
+  return new Set(norm).size === 4;
+}
+
 function parseQuizBlocks(txt: string, wantTopic = false): QuizQ[] {
   const out: QuizQ[] = [];
   const blocks = txt.split(/\n(?=\s*Q:)/i);
@@ -46,7 +56,7 @@ function parseQuizBlocks(txt: string, wantTopic = false): QuizQ[] {
     const q = b.match(/Q:\s*(.+)/i)?.[1]?.trim();
     const opts = [...b.matchAll(/^\s*([A-D])[).]\s*(.+)$/gim)].slice(0, 4).map((m) => m[2].trim());
     const correct = b.match(/CORRECT:\s*([A-D])/i)?.[1]?.toUpperCase();
-    if (!q || opts.length !== 4 || !correct) continue;
+    if (!q || !correct || !optionsOk(opts)) continue;
     const answer = "ABCD".indexOf(correct);
     const item: QuizQ = { q, options: opts, answer };
     if (wantTopic) {
@@ -68,7 +78,7 @@ export async function genQuiz(
   const txt = await ask(
     `Write ${count} exam-style multiple-choice questions for a Mauritius ${subject} student on: ${topics.join(", ")}. Difficulty: ${difficulty}. Four options each, one correct, plausible distractors.${
       source ? `\n\nGround them in the student's notes:\n${source.slice(0, 6000)}` : ""
-    }\n\nOutput each question as a block in EXACTLY this format, one blank line between blocks, no other text:\nQ: <question>\nA) <option>\nB) <option>\nC) <option>\nD) <option>\nCORRECT: <A, B, C or D>`,
+    }\n\nEvery option must be a REAL, fully written-out answer — never just the letter. Output each question as a block in EXACTLY this format, one blank line between blocks, no other text:\nQ: <question>\nA) <option>\nB) <option>\nC) <option>\nD) <option>\nCORRECT: <A, B, C or D>\n\nExample:\nQ: Which gas do plants absorb during photosynthesis?\nA) Oxygen\nB) Carbon dioxide\nC) Nitrogen\nD) Hydrogen\nCORRECT: B`,
     2600
   );
   return parseQuizBlocks(txt).slice(0, count);
@@ -94,11 +104,12 @@ export async function genSummary(
 export type DiagQ = { q: string; options: string[]; answer: number; topicIndex: number };
 export async function genDiagnostic(subject: string, topics: string[]): Promise<DiagQ[]> {
   const list = topics.map((t, i) => `${i}: ${t}`).join("\n");
-  const txt = await ask(
-    `Write ONE multiple-choice question for EACH of these ${subject} topics, to gauge a Mauritius student's level. Four options each, one correct.\n\nTopics:\n${list}\n\nOutput each as a block in EXACTLY this format, one blank line between blocks, no other text:\nQ: <question>\nA) <option>\nB) <option>\nC) <option>\nD) <option>\nCORRECT: <A, B, C or D>\nTOPIC: <the topic number>`,
-    2600
-  );
-  return parseQuizBlocks(txt, true).map((q) => ({
+  const prompt = `Write ONE multiple-choice question for EACH of these ${subject} topics, to gauge a Mauritius student's level. Four options each, one correct.\n\nTopics:\n${list}\n\nEvery option must be a REAL, fully written-out answer — never just the letter. Output each as a block in EXACTLY this format, one blank line between blocks, no other text:\nQ: <question>\nA) <option>\nB) <option>\nC) <option>\nD) <option>\nCORRECT: <A, B, C or D>\nTOPIC: <the topic number>\n\nExample:\nQ: Which gas do plants absorb during photosynthesis?\nA) Oxygen\nB) Carbon dioxide\nC) Nitrogen\nD) Hydrogen\nCORRECT: B\nTOPIC: 0`;
+  let parsed = parseQuizBlocks(await ask(prompt, 2600), true);
+  // Free models sometimes emit placeholder options that the guard drops — retry once.
+  if (parsed.length < Math.min(3, topics.length))
+    parsed = parseQuizBlocks(await ask(prompt, 2600), true);
+  return parsed.map((q) => ({
     q: q.q,
     options: q.options,
     answer: q.answer,

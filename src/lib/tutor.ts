@@ -155,7 +155,8 @@ export function systemPrompt(
   course: Course,
   agenda: Agenda,
   mastery: MasteryRow[],
-  materials: { filename: string; extracted_text: string | null }[]
+  materials: { filename: string; extracted_text: string | null }[],
+  firstTurn: boolean
 ): string {
   const weakest = mastery
     .slice(0, 6)
@@ -191,7 +192,11 @@ TODAY'S AGENDA:
 ${agenda.review.length ? `1. Quick spaced-repetition review: ${agenda.review.map((r) => `${r.name} [id: ${r.topic_id}]`).join(", ")} — one short question each.` : ""}
 ${agenda.focus ? `${agenda.review.length ? "2" : "1"}. Main focus: ${agenda.focus.name} [id: ${agenda.focus.topic_id}] (mastery ${agenda.focus.score}/100) — teach, then practise.` : ""}
 ${mat ? `\nTHE STUDENT'S OWN UPLOADED MATERIALS (teach from these — use their wording and examples):\n${mat}\n` : ""}
-Now begin: greet ${profile.name ?? "the student"} by name in one line, then go straight into the agenda. Tune your teaching to their questionnaire above.`;
+${
+    firstTurn
+      ? `Now begin: greet ${profile.name ?? "the student"} by name in ONE short line, then go straight into the agenda.`
+      : `Continue the lesson — do NOT greet again or restart. Respond directly to the student's last message: if they attempted a question, mark their working, say clearly whether it is right or wrong, then add the silent [[MASTERY <topic_id> ok|miss]] line for the topic being practised (use its exact [id: ...] above). If they asked something, answer it.`
+  } Tune your teaching to their questionnaire above.`;
 }
 
 export const MASTERY_TOOL = {
@@ -211,31 +216,23 @@ export const MASTERY_TOOL = {
   },
 };
 
-// Deterministic mastery recording — no extra LLM call (free-tier tool calls are too
-// unreliable). The tutor's own reply tells us if the student was right; the student's
-// message tells us whether they attempted. Applied to the topic being worked on.
-const POSITIVE =
-  /\b(correct|exactly|well done|great job|good job|perfect|spot on|nicely|that'?s right|you got it|precisely|brilliant)\b|✓|👏|🎉|💯/i;
-const NEGATIVE =
-  /\b(not quite|almost|not correct|isn'?t right|not right|that'?s not|incorrect|careful|check again|try again|let'?s re|mistake|oops|close,? but|small (slip|error))\b/i;
+// Mastery recording via a silent marker the tutor emits (free models can't drive tool
+// calls, but reliably follow a fixed text format — same trick the study generators use).
+// The tutor appends `[[MASTERY <topic_id> ok|miss]]`; we parse it, then strip it before the
+// student ever sees it (route also holds it back mid-stream).
+const MASTERY_MARKER = /\[\[MASTERY\s+([0-9a-fA-F-]{36})\s+(ok|miss)\]\]/g;
 
-export function looksLikeAttempt(studentMsg: string): boolean {
-  if (studentMsg.length > 500) return false;
-  return /[0-9=]|\bx\s*=|\banswer|\bi (?:think|got|get)\b|\bso\b/i.test(studentMsg);
+export function parseMasteryMarkers(text: string): { topic_id: string; gotIt: boolean }[] {
+  const out: { topic_id: string; gotIt: boolean }[] = [];
+  for (const m of text.matchAll(MASTERY_MARKER))
+    out.push({ topic_id: m[1], gotIt: m[2].toLowerCase() === "ok" });
+  return out;
 }
 
-export async function classifyAttempt(
-  supabase: SupabaseClient,
-  userId: string,
-  topicId: string | null,
-  studentMsg: string,
-  tutorReply: string
-): Promise<number> {
-  if (!topicId || !looksLikeAttempt(studentMsg)) return 0;
-  const pos = POSITIVE.test(tutorReply);
-  const neg = NEGATIVE.test(tutorReply);
-  if (!pos && !neg) return 0; // tutor gave no clear verdict — don't guess
-  return applyMasteryUpdate(supabase, userId, { topic_id: topicId, gotIt: pos && !neg });
+// Remove markers from text. No trim — the streaming path relies on it being length-safe;
+// callers that persist should .trim() themselves.
+export function stripMasteryMarkers(text: string): string {
+  return text.replace(MASTERY_MARKER, "");
 }
 
 // Applies an update and returns XP earned for it.

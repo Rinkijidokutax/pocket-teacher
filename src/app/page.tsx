@@ -29,9 +29,9 @@ export default function Landing() {
 
       <div className="mt-8 flex flex-col gap-2.5 rise d3">
         {[
-          ["📚", "Any subject, any grade", "Primary to university"],
+          ["📚", "Any subject, any level", "Primary to university"],
           ["📸", "Upload anything", "Notes, PDFs, past papers, a photo"],
-          ["📈", "It remembers your gaps", "Adaptive mastery, spaced review"],
+          ["📈", "It remembers your gaps", "Spaced review, right before you'd forget"],
         ].map(([icon, t, s]) => (
           <div key={t} className="flex items-center gap-3 py-2 border-b border-[color:var(--line)]">
             <span className="text-xl w-7 text-center">{icon}</span>
@@ -48,7 +48,7 @@ export default function Landing() {
           Start learning →
         </Link>
         <p className="text-center text-xs text-[color:var(--ink-faint)] mt-3">
-          Free every day · Cambridge SC & HSC ready
+          Free, no limits · Cambridge SC & HSC ready
         </p>
       </div>
     </main>
