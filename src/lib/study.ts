@@ -96,6 +96,43 @@ export async function genQuiz(
     .slice(0, count);
 }
 
+// Adaptive diagnostic: one question per provided topic, tagged by index,
+// so we can seed the mastery map per topic from the results.
+export type DiagQ = { q: string; options: string[]; answer: number; topicIndex: number };
+export async function genDiagnostic(
+  subject: string,
+  topics: string[]
+): Promise<DiagQ[]> {
+  const list = topics.map((t, i) => `${i}: ${t}`).join("\n");
+  const out = await forced<{ questions: DiagQ[] }>(
+    "save_diagnostic",
+    {
+      type: "object",
+      properties: {
+        questions: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              q: { type: "string" },
+              options: { type: "array", items: { type: "string" }, description: "exactly 4 options" },
+              answer: { type: "integer", description: "index 0-3 of correct option" },
+              topicIndex: { type: "integer", description: "the topic number this question tests" },
+            },
+            required: ["q", "options", "answer", "topicIndex"],
+          },
+        },
+      },
+      required: ["questions"],
+    },
+    `Write ONE multiple-choice question (4 options, one correct) for EACH of these ${subject} topics, to gauge a Mauritius student's level. Set topicIndex to the topic number.\n\nTopics:\n${list}`,
+    2600
+  );
+  return (out?.questions ?? []).filter(
+    (q) => q.options?.length === 4 && q.answer >= 0 && q.answer < 4 && q.topicIndex >= 0
+  );
+}
+
 export async function genSummary(
   subject: string,
   topic: string,

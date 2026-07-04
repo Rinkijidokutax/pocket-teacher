@@ -104,7 +104,7 @@ export default function Onboarding() {
         })
       )
     );
-    router.replace("/home");
+    router.replace("/diagnostic");
   }
 
   const canNext =

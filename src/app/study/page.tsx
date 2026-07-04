@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import Nav from "@/components/Nav";
+import Pomodoro from "@/components/Pomodoro";
 
 type Course = { course_id: string; courses: { subject: string; emoji: string } | null };
 type Task = { id: string; title: string; kind: string; done: boolean; due: string };
@@ -126,6 +127,10 @@ export default function Study() {
               </p>
             </div>
           )}
+
+          <div className="rise">
+            <Pomodoro />
+          </div>
 
           <section className="rise">
             <p className="eyebrow mb-2">Today&apos;s plan</p>
