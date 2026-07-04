@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
-import { anthropic, MODEL } from "@/lib/ai";
+import { anthropic, MODEL, TOOL_MODEL } from "@/lib/ai";
 import {
   loadMastery,
   buildAgenda,
@@ -208,7 +208,7 @@ export async function POST(req: Request) {
         if (message && masteryApplied === 0) {
           xpEarned += await classifyAttempt(
             anthropic,
-            MODEL,
+            TOOL_MODEL,
             supabase,
             user.id,
             mastery.slice(0, 8).map((m) => ({

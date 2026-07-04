@@ -1,5 +1,5 @@
 import type Anthropic from "@anthropic-ai/sdk";
-import { anthropic, MODEL } from "./ai";
+import { anthropic, TOOL_MODEL } from "./ai";
 
 // Generic forced-tool structured generation (works on the free model too).
 async function forced<T>(
@@ -10,7 +10,7 @@ async function forced<T>(
 ): Promise<T | null> {
   try {
     const res = await anthropic.messages.create({
-      model: MODEL,
+      model: TOOL_MODEL,
       max_tokens: maxTokens,
       tools: [{ name: toolName, description: `Return the ${toolName}.`, input_schema: schema as never }],
       tool_choice: { type: "tool", name: toolName },

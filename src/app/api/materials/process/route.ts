@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
-import { anthropic, MODEL, VISION_MODEL } from "@/lib/ai";
+import { anthropic, TOOL_MODEL, VISION_MODEL } from "@/lib/ai";
 
 export const maxDuration = 120;
 
@@ -104,7 +104,7 @@ export async function POST(req: Request) {
 
     if (mat.kind === "syllabus") {
       const res = await anthropic.messages.create({
-        model: MODEL,
+        model: TOOL_MODEL,
         max_tokens: 3200, // ponytail: ~100 topics; huge syllabi may truncate — raise if needed
         tools: [SYLLABUS_TOOL],
         tool_choice: { type: "tool", name: "save_syllabus" },
