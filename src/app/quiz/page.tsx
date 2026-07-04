@@ -5,7 +5,13 @@ import { supabase } from "@/lib/supabase/client";
 import Nav from "@/components/Nav";
 
 type Q = { q: string; options: string[] };
-type Result = { score: number; total: number; correctAnswers: number[]; xp: number };
+type Result = {
+  score: number;
+  total: number;
+  correctAnswers: number[];
+  xp: number;
+  explanations?: (string | null)[];
+};
 
 export default function Quiz() {
   const router = useRouter();
@@ -126,6 +132,12 @@ export default function Quiz() {
                   );
                 })}
               </div>
+              {result?.explanations?.[qi] && (
+                <p className="text-xs text-[color:var(--ink-soft)] mt-3 leading-relaxed border-t border-[color:var(--line)] pt-2">
+                  <span className="font-semibold">Why: </span>
+                  {result.explanations[qi]}
+                </p>
+              )}
             </div>
           ))}
 

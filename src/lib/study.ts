@@ -38,7 +38,13 @@ export async function genFlashcards(
   return cards.slice(0, count);
 }
 
-export type QuizQ = { q: string; options: string[]; answer: number; topicIndex?: number };
+export type QuizQ = {
+  q: string;
+  options: string[];
+  answer: number;
+  topicIndex?: number;
+  explanation?: string;
+};
 
 // Reject degenerate options the free model sometimes emits (e.g. "A) A", "B) B") — a
 // single letter, blanks, or duplicates. Better to drop the question than show "A. A".
@@ -59,6 +65,8 @@ function parseQuizBlocks(txt: string, wantTopic = false): QuizQ[] {
     if (!q || !correct || !optionsOk(opts)) continue;
     const answer = "ABCD".indexOf(correct);
     const item: QuizQ = { q, options: opts, answer };
+    const why = b.match(/WHY:\s*(.+)/i)?.[1]?.trim();
+    if (why) item.explanation = why;
     if (wantTopic) {
       const ti = b.match(/TOPIC:\s*(\d+)/i)?.[1];
       item.topicIndex = ti ? parseInt(ti, 10) : 0;
@@ -78,7 +86,7 @@ export async function genQuiz(
   const txt = await ask(
     `Write ${count} exam-style multiple-choice questions for a Mauritius ${subject} student on: ${topics.join(", ")}. Difficulty: ${difficulty}. Four options each, one correct, plausible distractors.${
       source ? `\n\nGround them in the student's notes:\n${source.slice(0, 6000)}` : ""
-    }\n\nEvery option must be a REAL, fully written-out answer — never just the letter. Output each question as a block in EXACTLY this format, one blank line between blocks, no other text:\nQ: <question>\nA) <option>\nB) <option>\nC) <option>\nD) <option>\nCORRECT: <A, B, C or D>\n\nExample:\nQ: Which gas do plants absorb during photosynthesis?\nA) Oxygen\nB) Carbon dioxide\nC) Nitrogen\nD) Hydrogen\nCORRECT: B`,
+    }\n\nEvery option must be a REAL, fully written-out answer — never just the letter. Output each question as a block in EXACTLY this format, one blank line between blocks, no other text:\nQ: <question>\nA) <option>\nB) <option>\nC) <option>\nD) <option>\nCORRECT: <A, B, C or D>\nWHY: <one short sentence explaining why the correct answer is right>\n\nExample:\nQ: Which gas do plants absorb during photosynthesis?\nA) Oxygen\nB) Carbon dioxide\nC) Nitrogen\nD) Hydrogen\nCORRECT: B\nWHY: Plants take in carbon dioxide and release oxygen during photosynthesis.`,
     2600
   );
   return parseQuizBlocks(txt).slice(0, count);

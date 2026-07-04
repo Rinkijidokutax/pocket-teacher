@@ -16,8 +16,9 @@ export async function POST(req: Request) {
     .maybeSingle();
   if (!quiz) return Response.json({ error: "not_found" }, { status: 404 });
 
-  const qs = quiz.questions as { answer: number }[];
+  const qs = quiz.questions as { answer: number; explanation?: string }[];
   const correctAnswers = qs.map((q) => q.answer);
+  const explanations = qs.map((q) => q.explanation ?? null);
   let score = 0;
   qs.forEach((q, i) => {
     if (answers[i] === q.answer) score++;
@@ -40,5 +41,5 @@ export async function POST(req: Request) {
     answers,
   });
 
-  return Response.json({ ok: true, score, total, correctAnswers, xp });
+  return Response.json({ ok: true, score, total, correctAnswers, xp, explanations });
 }
