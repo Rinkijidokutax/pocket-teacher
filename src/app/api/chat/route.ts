@@ -139,24 +139,29 @@ export async function POST(req: Request) {
       .from("messages")
       .insert({ session_id: sid, user_id: user.id, role: "user", content: message });
 
+  // Load the most RECENT 60 messages (not the oldest), then restore chronological order.
   const { data: history } = await supabase
     .from("messages")
     .select("role, content")
     .eq("session_id", sid!)
-    .order("id", { ascending: true })
+    .order("id", { ascending: false })
     .limit(60);
+  const chron = (history ?? []).slice().reverse();
 
   const agenda = buildAgenda(mastery);
-  const firstTurn = (history?.length ?? 0) === 0;
+  const firstTurn = chron.length === 0;
   const system = systemPrompt(profile, courseCtx, agenda, mastery, materials ?? [], firstTurn);
 
-  const apiMessages: Anthropic.MessageParam[] = [
-    ...(history ?? []).map((m) => ({
-      role: m.role as "user" | "assistant",
-      content: m.content,
-    })),
-    { role: "user" as const, content: userText },
-  ];
+  const mapped: Anthropic.MessageParam[] = chron.map((m) => ({
+    role: m.role as "user" | "assistant",
+    content: m.content,
+  }));
+  // A real message was just persisted above, so it's already in `mapped` — don't append it
+  // again (that sent the student's turn to the model twice). Only the kickoff needs the opener.
+  const apiMessages: Anthropic.MessageParam[] =
+    message && mapped.length
+      ? mapped
+      : [...mapped, { role: "user" as const, content: userText }];
 
   const encoder = new TextEncoder();
   let assistantText = "";

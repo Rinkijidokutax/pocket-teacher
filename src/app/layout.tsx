@@ -22,7 +22,8 @@ export const viewport: Viewport = {
   themeColor: "#f7f4ec",
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
+  // Do NOT set maximumScale — blocking pinch-zoom fails accessibility (WCAG 1.4.4) and
+  // a revising student may need to zoom into a diagram or a maths line.
   viewportFit: "cover",
 };
 

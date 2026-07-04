@@ -15,7 +15,7 @@
   --card: #fffdf7;
   --ink: #1a1712;
   --ink-soft: #6b655a;
-  --ink-faint: #a39c8c;
+  --ink-faint: #756e5f; /* darkened from #a39c8c to meet WCAG AA contrast on paper */
   --line: #e6dfcf;
   --line-strong: #d8d0bc;
   --accent: #2438e0; /* electric cobalt */

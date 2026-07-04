@@ -24,7 +24,11 @@ export async function POST(req: Request) {
     .eq("course_id", courseId);
   if (topics?.length) {
     const rows = topics.map((t) => ({ user_id: user.id, topic_id: t.id, score: 20 }));
-    await supabase.from("mastery").upsert(rows, { onConflict: "user_id,topic_id" });
+    // ignoreDuplicates: only seed topics with no mastery row yet — re-enrolling must NOT
+    // reset a student's earned progress back to the baseline score of 20.
+    await supabase
+      .from("mastery")
+      .upsert(rows, { onConflict: "user_id,topic_id", ignoreDuplicates: true });
   }
 
   return Response.json({ ok: true, seeded: topics?.length ?? 0 });
