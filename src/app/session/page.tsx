@@ -15,6 +15,8 @@ export default function Session() {
   const [usage, setUsage] = useState<{ used: number; cap: number } | null>(null);
   const [xpToast, setXpToast] = useState(0);
   const [subject, setSubject] = useState("");
+  const [down, setDown] = useState(false);
+  const [notified, setNotified] = useState(false);
   const sessionIdRef = useRef<string | null>(null);
   const courseRef = useRef<string | null>(null);
   const startedRef = useRef(false);
@@ -100,10 +102,24 @@ export default function Session() {
       const { done, value } = await reader.read();
       if (done) break;
       acc += decoder.decode(value, { stream: true });
-      const current = acc;
-      setMessages((m) => [...m.slice(0, -1), { role: "assistant", content: current }]);
+      if (acc.includes("[[TEACHER_DOWN]]")) {
+        setDown(true);
+        setMessages((m) => m.slice(0, -1));
+        setStreaming(false);
+        return;
+      }
+      setMessages((m) => [...m.slice(0, -1), { role: "assistant", content: acc }]);
     }
     setStreaming(false);
+  }
+
+  async function notifyDown() {
+    setNotified(true);
+    await fetch("/api/notify-down", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ detail: subject }),
+    }).catch(() => {});
   }
 
   function submit(e: React.FormEvent) {
@@ -174,6 +190,23 @@ export default function Session() {
             </p>
           </div>
         )}
+        {down && (
+          <div className="card p-5 self-start max-w-[92%]" style={{ borderColor: "var(--streak)" }}>
+            <p className="text-2xl mb-1">😴</p>
+            <p className="font-semibold">Your teacher is taking a short break</p>
+            <p className="text-[color:var(--ink-soft)] text-sm mt-1">
+              They&apos;re briefly unavailable right now. Let us know and we&apos;ll get them
+              back as fast as possible.
+            </p>
+            <button
+              onClick={notifyDown}
+              disabled={notified}
+              className={`${notified ? "btn-ghost" : "btn"} w-full mt-3`}
+            >
+              {notified ? "✓ Thanks — we've been alerted" : "Let us know →"}
+            </button>
+          </div>
+        )}
         <div ref={bottomRef} />
       </div>
 
@@ -181,13 +214,13 @@ export default function Session() {
         <div className="flex gap-2 card p-1.5 items-center">
           <input
             className="flex-1 bg-transparent outline-none px-3 text-sm"
-            placeholder={capped ? "See you tomorrow!" : "Type your answer…"}
+            placeholder={down ? "Teacher unavailable" : capped ? "See you tomorrow!" : "Type your answer…"}
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            disabled={capped || streaming}
+            disabled={capped || streaming || down}
           />
           <button
-            disabled={capped || streaming || !input.trim()}
+            disabled={capped || streaming || down || !input.trim()}
             className="btn px-4 py-2.5 text-sm"
           >
             Send

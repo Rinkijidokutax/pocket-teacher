@@ -1,25 +1,19 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
+import { anthropic, MODEL } from "@/lib/ai";
 import {
   loadMastery,
   buildAgenda,
   systemPrompt,
   MASTERY_TOOL,
   applyMasteryUpdate,
+  classifyAttempt,
 } from "@/lib/tutor";
 import { XP } from "@/lib/levels";
 
 export const maxDuration = 120;
 
 const FREE_DAILY_MESSAGES = 25;
-const direct = !!process.env.ANTHROPIC_API_KEY;
-const anthropic = direct
-  ? new Anthropic()
-  : new Anthropic({
-      apiKey: process.env.OPENROUTER_API_KEY,
-      baseURL: "https://openrouter.ai/api",
-    });
-const MODEL = direct ? "claude-sonnet-5" : "anthropic/claude-sonnet-5";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -52,7 +46,7 @@ export async function POST(req: Request) {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("name, level, language, streak, last_study_date, xp")
+    .select("name, level, language, streak, last_study_date, xp, goal, survey")
     .eq("id", user.id)
     .single();
   if (!profile) return Response.json({ error: "no_profile" }, { status: 400 });
@@ -167,11 +161,13 @@ export async function POST(req: Request) {
     async start(controller) {
       try {
         let msgs = apiMessages;
+        let masteryApplied = 0;
         for (let turn = 0; turn < 4; turn++) {
           const msgStream = anthropic.messages.stream({
             model: MODEL,
             max_tokens: 1024,
-            thinking: { type: "disabled" },
+            // thinking is Anthropic-only; free OpenRouter models reject it
+            ...(MODEL.startsWith("claude") ? { thinking: { type: "disabled" as const } } : {}),
             system,
             tools: [MASTERY_TOOL],
             messages: msgs,
@@ -186,6 +182,7 @@ export async function POST(req: Request) {
           const toolResults: Anthropic.ToolResultBlockParam[] = [];
           for (const block of final.content) {
             if (block.type === "tool_use" && block.name === "update_mastery") {
+              masteryApplied++;
               xpEarned += await applyMasteryUpdate(
                 supabase,
                 user.id,
@@ -204,6 +201,22 @@ export async function POST(req: Request) {
             { role: "user", content: toolResults },
           ];
         }
+        // Fallback: if the model didn't record mastery inline but the student sent an
+        // attempt, run a cheap forced-tool classification so adaptation still works.
+        if (message && masteryApplied === 0) {
+          xpEarned += await classifyAttempt(
+            anthropic,
+            MODEL,
+            supabase,
+            user.id,
+            mastery.slice(0, 8).map((m) => ({
+              topic_id: m.topic_id,
+              name: m.topics?.name ?? m.topic_id,
+            })),
+            message,
+            assistantText
+          );
+        }
         if (assistantText)
           await supabase.from("messages").insert({
             session_id: sid,
@@ -217,16 +230,9 @@ export async function POST(req: Request) {
             .update({ xp: (profile.xp ?? 0) + xpEarned })
             .eq("id", user.id);
       } catch (e) {
-        const status = (e as { status?: number })?.status;
-        const outOfCredits =
-          status === 402 || /credit|afford/i.test(String((e as Error)?.message ?? ""));
-        controller.enqueue(
-          encoder.encode(
-            outOfCredits
-              ? "\n\n⚠️ Your teacher is temporarily unavailable — the AI service has run out of credits. (Top up at openrouter.ai/settings/credits to restore it.)"
-              : "\n\n(Connection hiccup — send your message again.)"
-          )
-        );
+        // Signal the frontend to render the clean "teacher unavailable" card + notify
+        // button, instead of showing a raw error to students.
+        controller.enqueue(encoder.encode("[[TEACHER_DOWN]]"));
         console.error("chat error", e);
       }
       controller.close();
