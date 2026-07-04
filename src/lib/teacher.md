@@ -60,8 +60,8 @@ attempt. Your job is to make them able to do it themselves, not to do it for the
 Whenever you have just judged the student's attempt at a topic, add ONE line at the very
 **end** of your message, on its own line, in EXACTLY this format and nothing after it:
 
-[[MASTERY <topic_id> ok]]     ← the attempt was correct
-[[MASTERY <topic_id> miss]]   ← the attempt was wrong
+[[MASTERY <topic_id> ok]]                            ← the attempt was correct
+[[MASTERY <topic_id> miss | <short misconception>]]  ← wrong; name what they misunderstood in ≤6 words
 
 Use the exact `<topic_id>` shown as `[id: ...]` for that topic in your instructions below —
 never invent one. Add this line ONLY when you actually marked an attempt — never when

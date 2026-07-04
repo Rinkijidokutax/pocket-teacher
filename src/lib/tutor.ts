@@ -88,6 +88,8 @@ export async function loadMastery(
 export function buildAgenda(rows: MasteryRow[]): Agenda {
   const due = rows
     .filter((r) => r.review_due && r.review_due <= today() && r.attempts > 0)
+    // most overdue first — a strong topic that's long due shouldn't starve behind a weak one
+    .sort((a, b) => (a.review_due! < b.review_due! ? -1 : 1))
     .slice(0, 2)
     .map((r) => ({ topic_id: r.topic_id, name: r.topics?.name ?? r.topic_id, score: r.score }));
 
@@ -195,7 +197,7 @@ ${mat ? `\nTHE STUDENT'S OWN UPLOADED MATERIALS (teach from these — use their 
 ${
     firstTurn
       ? `Now begin: greet ${profile.name ?? "the student"} by name in ONE short line, then go straight into the agenda.`
-      : `Continue the lesson — do NOT greet again or restart. Respond directly to the student's last message: if they attempted a question, mark their working, say clearly whether it is right or wrong, then add the silent [[MASTERY <topic_id> ok|miss]] line for the topic being practised (use its exact [id: ...] above). If they asked something, answer it.`
+      : `Continue the lesson — do NOT greet again or restart. Respond directly to the student's last message: if they attempted a question, mark their working, say clearly whether it is right or wrong, then add the silent line — [[MASTERY <topic_id> ok]] if right, or [[MASTERY <topic_id> miss | <what they misunderstood in ≤6 words>]] if wrong — for the topic being practised (use its exact [id: ...] above). If they asked something, answer it.`
   } Tune your teaching to their questionnaire above.`;
 }
 
@@ -220,12 +222,20 @@ export const MASTERY_TOOL = {
 // calls, but reliably follow a fixed text format — same trick the study generators use).
 // The tutor appends `[[MASTERY <topic_id> ok|miss]]`; we parse it, then strip it before the
 // student ever sees it (route also holds it back mid-stream).
-const MASTERY_MARKER = /\[\[MASTERY\s+([0-9a-fA-F-]{36})\s+(ok|miss)\]\]/g;
+// [[MASTERY <topic_id> ok]]  or  [[MASTERY <topic_id> miss | <short misconception>]]
+const MASTERY_MARKER =
+  /\[\[MASTERY\s+([0-9a-fA-F-]{36})\s+(ok|miss)(?:\s*\|\s*([^\]]+?))?\s*\]\]/g;
 
-export function parseMasteryMarkers(text: string): { topic_id: string; gotIt: boolean }[] {
-  const out: { topic_id: string; gotIt: boolean }[] = [];
+export function parseMasteryMarkers(
+  text: string
+): { topic_id: string; gotIt: boolean; misconception?: string }[] {
+  const out: { topic_id: string; gotIt: boolean; misconception?: string }[] = [];
   for (const m of text.matchAll(MASTERY_MARKER))
-    out.push({ topic_id: m[1], gotIt: m[2].toLowerCase() === "ok" });
+    out.push({
+      topic_id: m[1],
+      gotIt: m[2].toLowerCase() === "ok",
+      misconception: m[3]?.trim() || undefined,
+    });
   return out;
 }
 
