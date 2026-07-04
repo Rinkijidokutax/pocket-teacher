@@ -10,6 +10,8 @@ export async function POST(req: Request) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  // Require auth — otherwise this is a public endpoint that spams the admin with pushes.
+  if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
 
   const { detail } = (await req.json().catch(() => ({}))) as { detail?: string };
   const msg = `Pocket Teacher is DOWN — a student couldn't reach the teacher${
@@ -18,7 +20,7 @@ export async function POST(req: Request) {
 
   // 1) durable record
   await supabase.from("alerts").insert({
-    user_id: user?.id ?? null,
+    user_id: user.id,
     kind: "teacher_down",
     detail: detail ?? null,
   });

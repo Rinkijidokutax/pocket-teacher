@@ -27,6 +27,7 @@ export default function Progress() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [active, setActive] = useState<string>("");
   const [rows, setRows] = useState<Row[]>([]);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -46,6 +47,7 @@ export default function Progress() {
       const en = (e ?? []) as unknown as Course[];
       setCourses(en);
       if (en[0]) setActive(en[0].course_id);
+      setLoaded(true);
     })();
   }, [router]);
 
@@ -79,7 +81,9 @@ export default function Progress() {
       <h1 className="display text-3xl font-semibold rise">Your map</h1>
       {profile && <XpHeader xp={profile.xp} streak={profile.streak} />}
 
-      {courses.length === 0 ? (
+      {!loaded ? (
+        <p className="text-[color:var(--ink-faint)] animate-pulse rise">Loading your map…</p>
+      ) : courses.length === 0 ? (
         <Link href="/courses" className="card p-6 text-center text-[color:var(--ink-soft)]">
           Add a subject to start building your map →
         </Link>

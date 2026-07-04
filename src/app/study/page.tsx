@@ -16,6 +16,7 @@ export default function Study() {
   const [summary, setSummary] = useState<{ title: string; content: string } | null>(null);
   const [busy, setBusy] = useState<string>("");
   const [err, setErr] = useState<string>("");
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -29,6 +30,7 @@ export default function Study() {
       const en = (e ?? []) as unknown as Course[];
       setCourses(en);
       if (en[0]) setActive(en[0].course_id);
+      setLoaded(true);
     })();
   }, [router]);
 
@@ -96,7 +98,9 @@ export default function Study() {
     <main className="flex-1 px-6 pt-14 pb-28 max-w-md mx-auto w-full flex flex-col gap-5 min-h-screen">
       <h1 className="display text-3xl font-semibold rise">Study</h1>
 
-      {courses.length === 0 ? (
+      {!loaded ? (
+        <p className="text-[color:var(--ink-faint)] animate-pulse rise">Loading…</p>
+      ) : courses.length === 0 ? (
         <div className="card p-6 text-center text-[color:var(--ink-soft)]">
           Add a subject first to start revising.
         </div>
