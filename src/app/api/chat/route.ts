@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
-import { anthropic, MODEL } from "@/lib/ai";
+import { anthropic, CHAT_MODELS } from "@/lib/ai";
 import {
   loadMastery,
   buildAgenda,
@@ -202,78 +202,85 @@ export async function POST(req: Request) {
 
   const stream = new ReadableStream({
     async start(controller) {
-      try {
-        let msgs = apiMessages;
-        let masteryApplied = 0;
-        for (let turn = 0; turn < 4; turn++) {
-          const msgStream = anthropic.messages.stream({
-            model: MODEL,
-            max_tokens: 1024,
-            // thinking is Anthropic-only; free OpenRouter models reject it
-            ...(MODEL.startsWith("claude") ? { thinking: { type: "disabled" as const } } : {}),
-            system,
-            // Only give the tutor the tool on Claude (which calls it inline cleanly).
-            // Free models mishandle the tool schema mid-conversation and corrupt —
-            // for them mastery is recorded by the [[MASTERY]] marker parsed below instead.
-            ...(MODEL.startsWith("claude") ? { tools: [MASTERY_TOOL] } : {}),
-            messages: msgs,
-          });
-          msgStream.on("text", (delta) => {
-            assistantText += delta;
-            flush(controller, false);
-          });
-          const final = await msgStream.finalMessage();
-          if (final.stop_reason !== "tool_use") break;
+      let masteryApplied = 0;
+      // Try each model in the fallback chain. Fall back only if a model dies BEFORE it
+      // streams any text — once the student is seeing an answer we commit to that model.
+      for (const model of CHAT_MODELS) {
+        if (assistantText) break;
+        try {
+          let msgs = apiMessages;
+          for (let turn = 0; turn < 4; turn++) {
+            const msgStream = anthropic.messages.stream({
+              model,
+              max_tokens: 1024,
+              // thinking + tools are Anthropic-only; free OpenRouter models reject them.
+              // Free models record mastery via the [[MASTERY]] marker parsed below instead.
+              ...(model.startsWith("claude") ? { thinking: { type: "disabled" as const } } : {}),
+              system,
+              ...(model.startsWith("claude") ? { tools: [MASTERY_TOOL] } : {}),
+              messages: msgs,
+            });
+            msgStream.on("text", (delta) => {
+              assistantText += delta;
+              flush(controller, false);
+            });
+            const final = await msgStream.finalMessage();
+            if (final.stop_reason !== "tool_use") break;
 
-          const toolResults: Anthropic.ToolResultBlockParam[] = [];
-          for (const block of final.content) {
-            if (block.type === "tool_use" && block.name === "update_mastery") {
+            const toolResults: Anthropic.ToolResultBlockParam[] = [];
+            for (const block of final.content) {
+              if (block.type === "tool_use" && block.name === "update_mastery") {
+                masteryApplied++;
+                xpEarned += await applyMasteryUpdate(
+                  supabase,
+                  user.id,
+                  block.input as { topic_id: string; gotIt: boolean; misconception?: string }
+                );
+                toolResults.push({ type: "tool_result", tool_use_id: block.id, content: "recorded" });
+              }
+            }
+            msgs = [
+              ...msgs,
+              { role: "assistant", content: final.content },
+              { role: "user", content: toolResults },
+            ];
+          }
+          break; // this model answered
+        } catch (e) {
+          console.error(`chat model ${model} failed:`, (e as Error)?.message ?? e);
+          // loop tries the next model — unless text was already streamed (guard above)
+        }
+      }
+
+      if (assistantText) {
+        try {
+          flush(controller, true); // flush the held-back tail (markers stripped)
+          // Free models record mastery via the [[MASTERY ...]] marker; parse + apply it.
+          if (message && masteryApplied === 0) {
+            for (const mk of parseMasteryMarkers(assistantText)) {
               masteryApplied++;
-              xpEarned += await applyMasteryUpdate(
-                supabase,
-                user.id,
-                block.input as { topic_id: string; gotIt: boolean; misconception?: string }
-              );
-              toolResults.push({
-                type: "tool_result",
-                tool_use_id: block.id,
-                content: "recorded",
-              });
+              xpEarned += await applyMasteryUpdate(supabase, user.id, mk);
             }
           }
-          msgs = [
-            ...msgs,
-            { role: "assistant", content: final.content },
-            { role: "user", content: toolResults },
-          ];
+          const cleanText = stripMasteryMarkers(assistantText.slice(dropPrefix)).trim();
+          if (cleanText)
+            await supabase.from("messages").insert({
+              session_id: sid,
+              user_id: user.id,
+              role: "assistant",
+              content: cleanText,
+            });
+          if (xpEarned)
+            await supabase
+              .from("profiles")
+              .update({ xp: (profile.xp ?? 0) + xpEarned })
+              .eq("id", user.id);
+        } catch (e) {
+          console.error("chat post-processing error", e);
         }
-        // flush any held-back tail (markers stripped) to the student
-        flush(controller, true);
-        // Free models record mastery via the [[MASTERY ...]] marker; parse + apply it.
-        if (message && masteryApplied === 0) {
-          for (const mk of parseMasteryMarkers(assistantText)) {
-            masteryApplied++;
-            xpEarned += await applyMasteryUpdate(supabase, user.id, mk);
-          }
-        }
-        const cleanText = stripMasteryMarkers(assistantText.slice(dropPrefix)).trim();
-        if (cleanText)
-          await supabase.from("messages").insert({
-            session_id: sid,
-            user_id: user.id,
-            role: "assistant",
-            content: cleanText,
-          });
-        if (xpEarned)
-          await supabase
-            .from("profiles")
-            .update({ xp: (profile.xp ?? 0) + xpEarned })
-            .eq("id", user.id);
-      } catch (e) {
-        // Signal the frontend to render the clean "teacher unavailable" card + notify
-        // button, instead of showing a raw error to students.
+      } else {
+        // Every model failed — render the clean "teacher unavailable" card + notify button.
         controller.enqueue(encoder.encode("[[TEACHER_DOWN]]"));
-        console.error("chat error", e);
       }
       controller.close();
     },

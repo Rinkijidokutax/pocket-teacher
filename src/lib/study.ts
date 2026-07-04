@@ -1,20 +1,12 @@
-import { anthropic, MODEL } from "./ai";
+import { complete } from "./ai";
 
 // Free models are unreliable at tool_choice and JSON, but reliable at generating
 // plain text. So every generator asks for a simple line/block format and parses it
-// with regex — robust across models, on the coherent MODEL (nemotron).
+// with regex. complete() adds cross-model fallback — if one free model is down or
+// rate-limited, the next in the chain answers, with identical instructions.
 async function ask(prompt: string, maxTokens = 2000): Promise<string> {
-  try {
-    const res = await anthropic.messages.create({
-      model: MODEL,
-      max_tokens: maxTokens,
-      messages: [{ role: "user", content: prompt }],
-    });
-    return (res.content ?? []).map((b) => (b.type === "text" ? b.text : "")).join("");
-  } catch (e) {
-    console.error("ask failed", e);
-    return "";
-  }
+  const { text } = await complete([{ role: "user", content: prompt }], maxTokens);
+  return text;
 }
 
 export type Flashcard = { front: string; back: string };

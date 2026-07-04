@@ -25,3 +25,34 @@ export const TOOL_MODEL = direct
 export const VISION_MODEL = direct
   ? "claude-sonnet-5"
   : process.env.VISION_MODEL || "google/gemma-4-31b-it:free";
+
+// Free OpenRouter models rate-limit and drop out. CHAT_MODELS is the ordered fallback
+// chain: the primary tutor first, then other free models, then openrouter/free (a meta
+// route that auto-picks any available free model). Every model gets the SAME system prompt
+// and delimited-output rules, so a fallback never changes the tutor's behaviour.
+// Tune without code changes via TUTOR_MODELS="a,b,c".
+export const CHAT_MODELS: string[] = direct
+  ? ["claude-sonnet-5"]
+  : (process.env.TUTOR_MODELS || `${MODEL},google/gemma-4-31b-it:free,openrouter/free`)
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+// Non-streaming completion with model fallback — returns the first non-empty result.
+// Used by every generator (summaries, flashcards, quizzes, diagnostic).
+export async function complete(
+  messages: Anthropic.MessageParam[],
+  maxTokens = 2000,
+  models: string[] = CHAT_MODELS
+): Promise<{ text: string; model: string | null }> {
+  for (const model of models) {
+    try {
+      const res = await anthropic.messages.create({ model, max_tokens: maxTokens, messages });
+      const text = (res.content ?? []).map((b) => (b.type === "text" ? b.text : "")).join("");
+      if (text.trim()) return { text, model };
+    } catch (e) {
+      console.error(`model ${model} failed:`, (e as Error)?.message ?? e);
+    }
+  }
+  return { text: "", model: null };
+}
