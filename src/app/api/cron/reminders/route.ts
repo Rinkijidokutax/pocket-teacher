@@ -5,13 +5,6 @@ import { createClient } from "@/lib/supabase/server";
 // chosen time of day (from the questionnaire). Node runtime (web-push needs crypto).
 export const dynamic = "force-dynamic";
 
-const BUCKET_HOUR: Record<string, number> = {
-  morning: 8,
-  afternoon: 14,
-  evening: 18,
-  night: 21,
-};
-
 const NUDGES = [
   "Time for today's lesson 📚 keep your streak alive!",
   "Your teacher is ready — 10 minutes today goes a long way ✏️",
@@ -27,10 +20,11 @@ export async function GET(req: Request) {
   if (!process.env.VAPID_PRIVATE_KEY || !process.env.VAPID_PUBLIC_KEY)
     return Response.json({ error: "no_vapid" }, { status: 500 });
 
-  // which time-of-day bucket is it right now in Mauritius (UTC+4, no DST)?
+  // Hobby plan allows one daily cron, so we remind everyone in a single run.
+  // (On Pro, switch vercel.json to hourly and pass the current bucket here for
+  // per-time-of-day reminders — the function already supports specific buckets.)
   const mauritiusHour = (new Date().getUTCHours() + 4) % 24;
-  const bucket = Object.entries(BUCKET_HOUR).find(([, h]) => h === mauritiusHour)?.[0];
-  if (!bucket) return Response.json({ ok: true, sent: 0, note: "no bucket this hour" });
+  const bucket = "all";
 
   const supabase = await createClient();
   const { data: subs } = await supabase.rpc("due_reminders", {
