@@ -13,23 +13,25 @@ export default function Landing() {
   }, [router]);
 
   return (
-    <main className="flex-1 flex flex-col items-center justify-center px-8 text-center gap-6 min-h-screen">
-      <div className="text-6xl">📖</div>
-      <h1 className="text-4xl font-bold bg-gradient-to-r from-violet-300 to-fuchsia-300 bg-clip-text text-transparent">
+    <main className="flex-1 flex flex-col items-center justify-center px-8 text-center gap-7 min-h-screen">
+      <div className="text-7xl floaty">🎓</div>
+      <h1 className="text-5xl font-black bg-gradient-to-r from-violet-300 via-fuchsia-300 to-amber-300 bg-clip-text text-transparent">
         Pocket Teacher
       </h1>
-      <p className="text-slate-300 max-w-xs leading-relaxed">
-        A teacher in your pocket — the best teacher, that adapts to{" "}
-        <span className="text-violet-300">you</span>: your strengths, weaknesses
-        and habits. Toward your goal — your courses, your level, your exams.
+      <p className="text-slate-300 max-w-xs leading-relaxed text-[15px]">
+        The best teacher — in your pocket. It adapts to{" "}
+        <span className="text-fuchsia-300 font-semibold">you</span>: your strengths,
+        your weaknesses, your habits. Any subject, any level, all the way to your exam.
       </p>
-      <Link
-        href="/login"
-        className="bg-violet-600 hover:bg-violet-500 text-white font-semibold rounded-2xl px-10 py-4 text-lg"
-      >
-        Get started
+      <div className="flex flex-wrap justify-center gap-2 max-w-xs">
+        {["🔥 Streaks", "⚡ XP & levels", "📸 Upload anything", "🇲🇺 Any grade"].map((c) => (
+          <span key={c} className="chip">{c}</span>
+        ))}
+      </div>
+      <Link href="/login" className="btn w-full max-w-xs text-lg pop">
+        Start learning →
       </Link>
-      <p className="text-xs text-slate-500">Cambridge O-Level Maths · Mauritius 🇲🇺</p>
+      <p className="text-xs text-slate-500">Primary · SC · HSC · University · Mauritius 🇲🇺</p>
     </main>
   );
 }

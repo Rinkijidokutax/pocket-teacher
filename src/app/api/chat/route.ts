@@ -1,17 +1,17 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
 import {
+  loadMastery,
   buildAgenda,
   systemPrompt,
   MASTERY_TOOL,
   applyMasteryUpdate,
-  type MasteryRow,
 } from "@/lib/tutor";
+import { XP } from "@/lib/levels";
 
 export const maxDuration = 120;
 
 const FREE_DAILY_MESSAGES = 25;
-// prefer direct Anthropic; fall back to OpenRouter's Anthropic-compatible endpoint
 const direct = !!process.env.ANTHROPIC_API_KEY;
 const anthropic = direct
   ? new Anthropic()
@@ -30,9 +30,10 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
 
-  const { sessionId, message } = (await req.json()) as {
+  const { sessionId, message, courseId } = (await req.json()) as {
     sessionId?: string;
     message?: string;
+    courseId?: string;
   };
 
   // free-tier daily cap
@@ -51,33 +52,74 @@ export async function POST(req: Request) {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("name, level, language, exam_date, goal, streak, last_study_date")
+    .select("name, level, language, streak, last_study_date, xp")
     .eq("id", user.id)
     .single();
   if (!profile) return Response.json({ error: "no_profile" }, { status: 400 });
 
-  const { data: masteryData } = await supabase
-    .from("mastery")
-    .select(
-      "topic_id, score, attempts, interval_days, review_due, misconceptions, syllabus_topics(name, unit)"
-    )
+  // resolve the active course: explicit, else session's, else first enrollment
+  let activeCourse = courseId ?? null;
+  if (!activeCourse && sessionId) {
+    const { data: s } = await supabase
+      .from("sessions")
+      .select("course_id")
+      .eq("id", sessionId)
+      .maybeSingle();
+    activeCourse = s?.course_id ?? null;
+  }
+  if (!activeCourse) {
+    const { data: e } = await supabase
+      .from("enrollments")
+      .select("course_id, exam_date")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    activeCourse = e?.course_id ?? null;
+  }
+  if (!activeCourse)
+    return Response.json({ error: "no_course" }, { status: 400 });
+
+  const { data: course } = await supabase
+    .from("courses")
+    .select("subject, level, board, exam_date")
+    .eq("id", activeCourse)
+    .maybeSingle();
+  // exam date can also live on the enrollment
+  const { data: enr } = await supabase
+    .from("enrollments")
+    .select("exam_date")
     .eq("user_id", user.id)
-    .order("score", { ascending: true });
-  const mastery = (masteryData ?? []) as unknown as MasteryRow[];
+    .eq("course_id", activeCourse)
+    .maybeSingle();
+  const courseCtx = course
+    ? { ...course, exam_date: enr?.exam_date ?? course.exam_date }
+    : null;
+
+  const mastery = await loadMastery(supabase, user.id, activeCourse);
+  const { data: materials } = await supabase
+    .from("materials")
+    .select("filename, extracted_text")
+    .eq("user_id", user.id)
+    .eq("course_id", activeCourse)
+    .eq("status", "ready")
+    .limit(6);
 
   let sid = sessionId;
+  let xpEarned = 0;
   if (!sid) {
-    const agenda = await buildAgenda(supabase, user.id);
-    const { data: session, error } = await supabase
+    const agenda = buildAgenda(mastery);
+    const { data: session } = await supabase
       .from("sessions")
-      .insert({ user_id: user.id, agenda })
+      .insert({ user_id: user.id, course_id: activeCourse, agenda })
       .select("id")
       .single();
-    if (error || !session)
+    if (!session)
       return Response.json({ error: "session_create_failed" }, { status: 500 });
     sid = session.id;
+    xpEarned += XP.session;
 
-    // streak: consecutive study days
+    // streak
     const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
     const streak =
       profile.last_study_date === today()
@@ -95,11 +137,10 @@ export async function POST(req: Request) {
   const userText =
     message ??
     "(The student just opened today's session. Greet them and begin the agenda.)";
-  if (message) {
+  if (message)
     await supabase
       .from("messages")
       .insert({ session_id: sid, user_id: user.id, role: "user", content: message });
-  }
 
   const { data: history } = await supabase
     .from("messages")
@@ -108,8 +149,8 @@ export async function POST(req: Request) {
     .order("id", { ascending: true })
     .limit(60);
 
-  const agenda = await buildAgenda(supabase, user.id);
-  const system = systemPrompt(profile, agenda, mastery);
+  const agenda = buildAgenda(mastery);
+  const system = systemPrompt(profile, courseCtx, agenda, mastery, materials ?? []);
 
   const apiMessages: Anthropic.MessageParam[] = [
     ...(history ?? []).map((m) => ({
@@ -126,12 +167,11 @@ export async function POST(req: Request) {
     async start(controller) {
       try {
         let msgs = apiMessages;
-        // tool-use loop: stream text, apply mastery updates, continue
         for (let turn = 0; turn < 4; turn++) {
           const msgStream = anthropic.messages.stream({
             model: MODEL,
             max_tokens: 1024,
-            thinking: { type: "disabled" }, // fast phone chat; adaptive default adds latency
+            thinking: { type: "disabled" },
             system,
             tools: [MASTERY_TOOL],
             messages: msgs,
@@ -141,20 +181,12 @@ export async function POST(req: Request) {
             controller.enqueue(encoder.encode(delta));
           });
           const final = await msgStream.finalMessage();
-          console.log(
-            "turn",
-            turn,
-            "stop:",
-            final.stop_reason,
-            "tools:",
-            final.content.filter((b) => b.type === "tool_use").map((b) => b.name)
-          );
           if (final.stop_reason !== "tool_use") break;
 
           const toolResults: Anthropic.ToolResultBlockParam[] = [];
           for (const block of final.content) {
             if (block.type === "tool_use" && block.name === "update_mastery") {
-              await applyMasteryUpdate(
+              xpEarned += await applyMasteryUpdate(
                 supabase,
                 user.id,
                 block.input as { topic_id: string; gotIt: boolean; misconception?: string }
@@ -172,14 +204,18 @@ export async function POST(req: Request) {
             { role: "user", content: toolResults },
           ];
         }
-        if (assistantText) {
+        if (assistantText)
           await supabase.from("messages").insert({
             session_id: sid,
             user_id: user.id,
             role: "assistant",
             content: assistantText,
           });
-        }
+        if (xpEarned)
+          await supabase
+            .from("profiles")
+            .update({ xp: (profile.xp ?? 0) + xpEarned })
+            .eq("id", user.id);
       } catch (e) {
         controller.enqueue(
           encoder.encode("\n\n(Connection hiccup — send your message again.)")
@@ -196,6 +232,7 @@ export async function POST(req: Request) {
       "X-Session-Id": sid!,
       "X-Messages-Used": String(used + 1),
       "X-Messages-Cap": String(FREE_DAILY_MESSAGES),
+      "X-Xp-Earned": String(xpEarned),
     },
   });
 }

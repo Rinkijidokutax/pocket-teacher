@@ -40,7 +40,7 @@ export default function Login() {
       .from("profiles")
       .select("onboarded")
       .eq("id", user!.id)
-      .single();
+      .maybeSingle();
     router.replace(profile?.onboarded ? "/home" : "/onboarding");
   }
 
@@ -78,10 +78,7 @@ export default function Login() {
         />
         {error && <p className="text-red-400 text-sm">{error}</p>}
         {notice && <p className="text-emerald-400 text-sm">{notice}</p>}
-        <button
-          disabled={busy}
-          className="bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-semibold rounded-2xl py-4 mt-2"
-        >
+        <button disabled={busy} className="btn mt-2">
           {busy ? "..." : mode === "signup" ? "Sign up" : "Sign in"}
         </button>
       </form>

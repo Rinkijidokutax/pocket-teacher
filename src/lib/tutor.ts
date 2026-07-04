@@ -1,5 +1,7 @@
-// Tutor engine: session agenda, student snapshot, system prompt, spaced repetition.
+// Tutor engine: session agenda, student snapshot, system prompt, spaced repetition,
+// XP. Now course-aware and materials-aware (topics belong to a course).
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { XP } from "./levels";
 
 export type MasteryRow = {
   topic_id: string;
@@ -8,7 +10,7 @@ export type MasteryRow = {
   interval_days: number;
   review_due: string | null;
   misconceptions: string[];
-  syllabus_topics: { name: string; unit: string } | null;
+  topics: { name: string; unit: string; course_id: string } | null;
 };
 
 export type Agenda = {
@@ -18,25 +20,45 @@ export type Agenda = {
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-export async function buildAgenda(supabase: SupabaseClient, userId: string): Promise<Agenda> {
-  const { data } = await supabase
+// Fetch mastery rows for a user, optionally scoped to one course.
+export async function loadMastery(
+  supabase: SupabaseClient,
+  userId: string,
+  courseId?: string | null
+): Promise<MasteryRow[]> {
+  let topicIds: string[] | null = null;
+  if (courseId) {
+    const { data: t } = await supabase
+      .from("topics")
+      .select("id")
+      .eq("course_id", courseId);
+    topicIds = (t ?? []).map((r) => r.id);
+    if (topicIds.length === 0) return [];
+  }
+  let q = supabase
     .from("mastery")
-    .select("topic_id, score, attempts, interval_days, review_due, misconceptions, syllabus_topics(name, unit)")
+    .select(
+      "topic_id, score, attempts, interval_days, review_due, misconceptions, topics(name, unit, course_id)"
+    )
     .eq("user_id", userId)
     .order("score", { ascending: true });
-  const rows = (data ?? []) as unknown as MasteryRow[];
+  if (topicIds) q = q.in("topic_id", topicIds);
+  const { data } = await q;
+  return (data ?? []) as unknown as MasteryRow[];
+}
 
+export function buildAgenda(rows: MasteryRow[]): Agenda {
   const due = rows
     .filter((r) => r.review_due && r.review_due <= today() && r.attempts > 0)
     .slice(0, 2)
-    .map((r) => ({ topic_id: r.topic_id, name: r.syllabus_topics?.name ?? r.topic_id, score: r.score }));
+    .map((r) => ({ topic_id: r.topic_id, name: r.topics?.name ?? r.topic_id, score: r.score }));
 
   const focusRow = rows.find((r) => !due.some((d) => d.topic_id === r.topic_id));
   const focus = focusRow
     ? {
         topic_id: focusRow.topic_id,
-        name: focusRow.syllabus_topics?.name ?? focusRow.topic_id,
-        unit: focusRow.syllabus_topics?.unit ?? "",
+        name: focusRow.topics?.name ?? focusRow.topic_id,
+        unit: focusRow.topics?.unit ?? "",
         score: focusRow.score,
       }
     : null;
@@ -44,9 +66,8 @@ export async function buildAgenda(supabase: SupabaseClient, userId: string): Pro
   return { review: due, focus };
 }
 
-// SM-2-ish: correct → grow interval, wrong → reset.
-// ponytail: basic SM-2, upgrade to FSRS if retention data warrants
-export function nextReview(intervalDays: number, gotIt: boolean): { interval_days: number; review_due: string } {
+// SM-2-ish spacing. ponytail: basic SM-2, upgrade to FSRS if retention data warrants
+export function nextReview(intervalDays: number, gotIt: boolean) {
   const interval = gotIt ? Math.min(Math.round(intervalDays * 2.2) || 1, 60) : 1;
   const d = new Date();
   d.setDate(d.getDate() + interval);
@@ -57,72 +78,82 @@ type Profile = {
   name: string | null;
   level: string;
   language: string;
-  exam_date: string | null;
-  goal: string | null;
   streak: number;
 };
+type Course = { subject: string; level: string; board: string; exam_date: string | null } | null;
 
-export function systemPrompt(profile: Profile, agenda: Agenda, mastery: MasteryRow[]): string {
+export function systemPrompt(
+  profile: Profile,
+  course: Course,
+  agenda: Agenda,
+  mastery: MasteryRow[],
+  materials: { filename: string; extracted_text: string | null }[]
+): string {
   const weakest = mastery
-    .slice(0, 5)
-    .map((m) => `${m.syllabus_topics?.name ?? m.topic_id} [id: ${m.topic_id}] (${m.score}/100)`);
+    .slice(0, 6)
+    .map((m) => `${m.topics?.name ?? m.topic_id} [id: ${m.topic_id}] (${m.score}/100)`);
   const misconceptions = mastery
-    .flatMap((m) => (m.misconceptions ?? []).map((x) => `${m.syllabus_topics?.name}: ${x}`))
+    .flatMap((m) => (m.misconceptions ?? []).map((x) => `${m.topics?.name}: ${x}`))
     .slice(0, 6);
-  const daysToExam = profile.exam_date
-    ? Math.ceil((new Date(profile.exam_date).getTime() - Date.now()) / 86400000)
+  const daysToExam = course?.exam_date
+    ? Math.ceil((new Date(course.exam_date).getTime() - Date.now()) / 86400000)
     : null;
 
-  return `You are Pocket Teacher — the best private tutor in Mauritius, in the student's pocket. You teach Cambridge O-Level Mathematics (4024) to a student preparing for School Certificate.
+  // uploaded materials, truncated so the snapshot stays compact
+  const mat = materials
+    .filter((m) => m.extracted_text)
+    .map((m) => `--- ${m.filename} ---\n${(m.extracted_text ?? "").slice(0, 4000)}`)
+    .join("\n\n");
+
+  const subj = course ? `${course.subject} (${course.board}, ${course.level})` : "their subject";
+
+  return `You are Pocket Teacher — the best private tutor in Mauritius, in the student's pocket. You teach ${subj}.
 
 STUDENT
 - Name: ${profile.name ?? "Student"} · Streak: ${profile.streak} days${daysToExam !== null ? ` · Exam in ${daysToExam} days` : ""}
-- Goal: ${profile.goal ?? "pass the exam well"}
-- Weakest topics: ${weakest.join("; ") || "unknown yet"}
+- Weakest topics: ${weakest.join("; ") || "unknown yet — find out by asking a question"}
 - Known misconceptions: ${misconceptions.join("; ") || "none recorded"}
 
 TODAY'S AGENDA (follow it, but bend to the student's questions)
-${agenda.review.length ? `1. Quick review (spaced repetition): ${agenda.review.map((r) => `${r.name} [id: ${r.topic_id}]`).join(", ")} — 1 short question each.` : ""}
-${agenda.focus ? `${agenda.review.length ? "2" : "1"}. Main focus: ${agenda.focus.name} [id: ${agenda.focus.topic_id}] (current mastery ${agenda.focus.score}/100) — teach, then practise.` : ""}
+${agenda.review.length ? `1. Quick spaced-repetition review: ${agenda.review.map((r) => `${r.name} [id: ${r.topic_id}]`).join(", ")} — one short question each.` : ""}
+${agenda.focus ? `${agenda.review.length ? "2" : "1"}. Main focus: ${agenda.focus.name} [id: ${agenda.focus.topic_id}] (mastery ${agenda.focus.score}/100) — teach, then practise.` : ""}
 
 HOW YOU TEACH
-- Socratic and warm. Short messages (this is a phone). One question at a time, wait for their answer.
-- Teach in small steps: brief explanation → worked example → ask them to try one.
-- When they answer, mark their working line by line. Praise what's right, pinpoint exactly where it went wrong, never just give the answer.
-- If an explanation doesn't land, re-explain a different way (visual, real-life Mauritian examples — rupees, ratios at the bazaar, distances between towns).
-- Mirror the student's language: reply in English or French to match them (Kreol-friendly). Keep maths notation standard.
-- Use plain text and unicode maths (x², ½, √, π). No LaTeX, no markdown headers or tables.
-
+- Socratic and warm. Short messages (this is a phone). One question at a time, then wait.
+- Small steps: brief explanation → worked example → ask them to try one.
+- Mark their working line by line. Praise what's right, pinpoint the exact slip, never just hand over the answer.
+- If an explanation doesn't land, re-explain a different way — real Mauritian examples (rupees, the bazaar, distances between towns).
+- Mirror the student's language (English / French / Kreol-friendly). Standard maths notation, plain unicode (x², ½, √, π). No LaTeX, no markdown tables.
+${mat ? `\nTHE STUDENT'S OWN MATERIALS (they uploaded these — teach from them, quote them, use their exact notation and examples):\n${mat}\n` : ""}
 MASTERY TRACKING (critical — this is how you remember the student)
-Every time the student attempts a question and you judge it right or wrong, you MUST call the update_mastery tool in that same reply — do not skip it, even for quick or partial attempts. gotIt=true if they showed real understanding, false otherwise. Include a short misconception note when they reveal one (e.g. "adds indices when multiplying powers of different bases"). Call it silently — never mention the tool or scores unless asked. If you failed to record an attempt, your memory of this student is lost.
+Every time the student attempts a question and you judge it right or wrong, you MUST call the update_mastery tool in that same reply — never skip it. gotIt=true if they showed real understanding, false otherwise. Add a short misconception note when they reveal one. Use the exact topic id shown in [id: ...]. Call it silently; never mention the tool or scores unless asked. If no topic id fits, pick the closest weak topic's id.
 
-Start the session by greeting them by name in one line and going straight into the agenda.`;
+Start by greeting them by name in one line, then go straight into the agenda.`;
 }
 
 export const MASTERY_TOOL = {
   name: "update_mastery",
-  description:
-    "Record the result of a student attempt on a topic. Call after each judged attempt.",
+  description: "Record the result of a student attempt on a topic. Call after each judged attempt.",
   input_schema: {
     type: "object" as const,
     properties: {
       topic_id: {
         type: "string",
-        description:
-          "exact topic id shown in [id: ...] in your instructions, e.g. alg.quadratics — never invent one",
+        description: "exact topic id shown in [id: ...] in your instructions — never invent one",
       },
       gotIt: { type: "boolean", description: "true if the attempt showed understanding" },
-      misconception: { type: "string", description: "short note of misconception revealed, if any" },
+      misconception: { type: "string", description: "short note of a misconception, if any" },
     },
     required: ["topic_id", "gotIt"],
   },
 };
 
+// Applies an update and returns XP earned for it.
 export async function applyMasteryUpdate(
   supabase: SupabaseClient,
   userId: string,
   input: { topic_id: string; gotIt: boolean; misconception?: string }
-) {
+): Promise<number> {
   const { data: row } = await supabase
     .from("mastery")
     .select("score, attempts, interval_days, misconceptions")
@@ -131,10 +162,11 @@ export async function applyMasteryUpdate(
     .maybeSingle();
   if (!row) {
     console.warn("update_mastery: unknown topic_id", input.topic_id);
-    return;
+    return 0;
   }
-
-  const delta = input.gotIt ? Math.max(3, Math.round((100 - row.score) * 0.12)) : -Math.max(2, Math.round(row.score * 0.08));
+  const delta = input.gotIt
+    ? Math.max(3, Math.round((100 - row.score) * 0.12))
+    : -Math.max(2, Math.round(row.score * 0.08));
   const misconceptions: string[] = [...(row.misconceptions ?? [])];
   if (input.misconception) {
     misconceptions.push(input.misconception);
@@ -151,4 +183,5 @@ export async function applyMasteryUpdate(
     })
     .eq("user_id", userId)
     .eq("topic_id", input.topic_id);
+  return input.gotIt ? XP.correct : XP.attempt;
 }

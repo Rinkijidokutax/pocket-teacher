@@ -2,15 +2,75 @@
 
 @theme inline {
   --font-sans: var(--font-geist-sans);
+  --color-ink: #0b0a1f;
+  --color-ink2: #17143a;
+}
+
+:root {
+  color-scheme: dark;
 }
 
 body {
-  background: #0c0a1d;
-  color: #f1f5f9;
+  background:
+    radial-gradient(1200px 600px at 80% -10%, rgba(217, 70, 239, 0.18), transparent 60%),
+    radial-gradient(900px 500px at -10% 20%, rgba(124, 58, 237, 0.20), transparent 55%),
+    radial-gradient(700px 500px at 50% 120%, rgba(245, 158, 11, 0.12), transparent 60%),
+    #0b0a1f;
+  color: #f4f2ff;
   font-family: var(--font-geist-sans), system-ui, sans-serif;
+  -webkit-tap-highlight-color: transparent;
 }
 
+/* ---- gamified building blocks ---- */
+.card {
+  @apply rounded-[28px] bg-white/[0.06] border border-white/10 backdrop-blur-xl;
+  box-shadow: 0 10px 40px -20px rgba(124, 58, 237, 0.5);
+}
+.btn {
+  @apply rounded-2xl font-bold text-white px-6 py-4 text-center transition active:scale-[0.97] disabled:opacity-40;
+  background: linear-gradient(135deg, #7c3aed 0%, #d946ef 55%, #f59e0b 130%);
+  box-shadow: 0 10px 30px -8px rgba(217, 70, 239, 0.55);
+}
+.btn-ghost {
+  @apply rounded-2xl font-semibold px-5 py-3 text-center border border-white/15 bg-white/5 active:scale-[0.97] transition;
+}
 .input {
-  @apply w-full rounded-2xl bg-white/5 border border-white/10 px-4 py-3 text-sm outline-none focus:border-violet-400;
+  @apply w-full rounded-2xl bg-white/5 border border-white/10 px-4 py-3.5 text-sm outline-none focus:border-fuchsia-400/70 transition;
   color-scheme: dark;
 }
+.chip {
+  @apply rounded-full px-3 py-1 text-xs font-semibold bg-white/8 border border-white/10;
+}
+
+/* XP / progress bar */
+.xpbar {
+  @apply h-3 rounded-full bg-white/10 overflow-hidden;
+}
+.xpbar > span {
+  @apply block h-full rounded-full;
+  background: linear-gradient(90deg, #a855f7, #f472b6, #fbbf24);
+  transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes pop {
+  0% { transform: scale(0.8); opacity: 0; }
+  60% { transform: scale(1.06); }
+  100% { transform: scale(1); opacity: 1; }
+}
+.pop { animation: pop 0.35s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+@keyframes floaty {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+.floaty { animation: floaty 3s ease-in-out infinite; }
+
+@keyframes flamePulse {
+  0%, 100% { transform: scale(1) rotate(-2deg); }
+  50% { transform: scale(1.12) rotate(2deg); }
+}
+.flame { display: inline-block; animation: flamePulse 1.4s ease-in-out infinite; }
+
+/* hide scrollbars on chat */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
