@@ -22,10 +22,11 @@ export default function Home() {
     reminders: boolean;
   } | null>(null);
   const [courses, setCourses] = useState<Enrolled[]>([]);
-  const [due, setDue] = useState<{ reviews: number; tasks: { id: string; title: string }[] }>({
-    reviews: 0,
-    tasks: [],
-  });
+  const [due, setDue] = useState<{
+    reviews: number;
+    cards: number;
+    tasks: { id: string; title: string }[];
+  }>({ reviews: 0, cards: 0, tasks: [] });
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -53,13 +54,18 @@ export default function Home() {
 
       // What's due TODAY — spaced-repetition reviews + scheduled plan tasks.
       const todayStr = new Date().toISOString().slice(0, 10);
-      const [{ data: dueM }, { data: dueT }] = await Promise.all([
+      const [{ data: dueM }, { data: dueC }, { data: dueT }] = await Promise.all([
         supabase
           .from("mastery")
           .select("topic_id")
           .eq("user_id", user.id)
           .lte("review_due", todayStr)
           .gt("attempts", 0),
+        supabase
+          .from("flashcards")
+          .select("id")
+          .eq("user_id", user.id)
+          .lte("review_due", todayStr),
         supabase
           .from("study_tasks")
           .select("id, title")
@@ -71,6 +77,7 @@ export default function Home() {
       ]);
       setDue({
         reviews: dueM?.length ?? 0,
+        cards: dueC?.length ?? 0,
         tasks: (dueT ?? []) as { id: string; title: string }[],
       });
       setLoaded(true);
@@ -114,7 +121,7 @@ export default function Home() {
         </Link>
       )}
 
-      {(due.reviews > 0 || due.tasks.length > 0) && first && (
+      {(due.reviews > 0 || due.cards > 0 || due.tasks.length > 0) && first && (
         <section className="rise d1">
           <p className="eyebrow mb-2">Today</p>
           <div className="flex flex-col gap-2">
@@ -126,6 +133,18 @@ export default function Home() {
                 <span className="text-xl">🔁</span>
                 <span className="text-sm flex-1 font-semibold">
                   {due.reviews} topic{due.reviews > 1 ? "s" : ""} ready to review
+                </span>
+                <span className="text-[color:var(--ink-faint)]">→</span>
+              </Link>
+            )}
+            {due.cards > 0 && (
+              <Link
+                href={`/flashcards?course=${first.course_id}`}
+                className="card px-4 py-3 flex items-center gap-3"
+              >
+                <span className="text-xl">🃏</span>
+                <span className="text-sm flex-1 font-semibold">
+                  {due.cards} flashcard{due.cards > 1 ? "s" : ""} to review
                 </span>
                 <span className="text-[color:var(--ink-faint)]">→</span>
               </Link>

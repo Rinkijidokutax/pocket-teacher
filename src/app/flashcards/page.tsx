@@ -57,12 +57,12 @@ export default function Flashcards() {
 
   async function rate(gotIt: boolean) {
     const card = cards[i];
-    const interval = gotIt ? Math.min(Math.round(card.interval_days * 2.2) || 1, 60) : 1;
-    const due = new Date(Date.now() + interval * 86400000).toISOString().slice(0, 10);
-    await supabase
-      .from("flashcards")
-      .update({ interval_days: interval, reps: gotIt ? card.reps + 1 : 0, review_due: due })
-      .eq("id", card.id);
+    // Server records the spaced-repetition schedule AND credits the streak + XP.
+    fetch("/api/flashcards/review", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cardId: card.id, gotIt }),
+    }).catch(() => {});
     setDoneCount((d) => d + 1);
     if (i + 1 < cards.length) {
       setI(i + 1);
