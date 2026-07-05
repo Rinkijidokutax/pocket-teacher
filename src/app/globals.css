@@ -20,7 +20,8 @@
   --line-strong: #d8d0bc;
   --accent: #2438e0; /* electric cobalt */
   --accent-soft: #eceafb;
-  --streak: #e2620d; /* burnt orange */
+  --streak: #e2620d; /* burnt orange — decorative (flame, borders) */
+  --streak-text: #b34a08; /* AA-safe (~4.9:1 on paper) for small body text */
   --gold: #c9971f;
   color-scheme: light;
 }
@@ -196,3 +197,18 @@ body {
 
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Visible keyboard focus everywhere (was missing app-wide) */
+a:focus-visible,
+button:focus-visible,
+textarea:focus-visible,
+input:focus-visible,
+.btn:focus-visible,
+.btn-accent:focus-visible,
+.btn-ghost:focus-visible,
+.chip:focus-visible,
+.tile:focus-visible,
+.card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

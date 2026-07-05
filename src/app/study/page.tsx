@@ -131,7 +131,7 @@ export default function Study() {
           </div>
 
           {err && (
-            <p className="text-sm rise" style={{ color: "var(--streak)" }}>
+            <p className="text-sm rise" style={{ color: "var(--streak-text)" }}>
               {err}
             </p>
           )}

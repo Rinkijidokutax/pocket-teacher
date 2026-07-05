@@ -71,7 +71,9 @@ export default function Session() {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return router.replace("/login");
-      const param = new URLSearchParams(window.location.search).get("course");
+      const params = new URLSearchParams(window.location.search);
+      const param = params.get("course");
+      const topicParam = params.get("topic");
       courseRef.current = param;
       if (param) {
         supabase
@@ -81,7 +83,17 @@ export default function Session() {
           .maybeSingle()
           .then(({ data }) => data && setSubject(`${data.emoji} ${data.subject}`));
       }
-      send(null);
+      // Launched from a scheduled "revise <topic>" task — open the lesson on that topic.
+      if (topicParam) {
+        const { data: t } = await supabase
+          .from("topics")
+          .select("name")
+          .eq("id", topicParam)
+          .maybeSingle();
+        send(t?.name ? `Let's revise ${t.name}.` : null);
+      } else {
+        send(null);
+      }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -92,15 +104,26 @@ export default function Session() {
     setStreaming(true);
     setMessages((m) => [...m, { role: "assistant", content: "" }]);
 
-    const res = await fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sessionId: sessionIdRef.current,
-        message: text,
-        courseId: courseRef.current,
-      }),
-    });
+    let res: Response;
+    try {
+      res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: sessionIdRef.current,
+          message: text,
+          courseId: courseRef.current,
+        }),
+      });
+    } catch {
+      // network error before any response — never leave the typing dots spinning
+      setStreaming(false);
+      setMessages((m) => [
+        ...m.slice(0, -1),
+        { role: "assistant", content: "Connection hiccup — send your message again." },
+      ]);
+      return;
+    }
 
     if (res.status === 402) {
       setCapped(true);
@@ -128,26 +151,37 @@ export default function Session() {
       used: Number(res.headers.get("X-Messages-Used") ?? 0),
       cap: Number(res.headers.get("X-Messages-Cap") ?? 25),
     });
-    const xp = Number(res.headers.get("X-Xp-Earned") ?? 0);
-    if (xp > 0) {
-      setXpToast(xp);
-      setTimeout(() => setXpToast(0), 2200);
-    }
 
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let acc = "";
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      acc += decoder.decode(value, { stream: true });
-      if (acc.includes("[[TEACHER_DOWN]]")) {
-        setDown(true);
-        setMessages((m) => m.slice(0, -1));
-        setStreaming(false);
-        return;
+    let xpShown = false;
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        acc += decoder.decode(value, { stream: true });
+        if (acc.includes("[[TEACHER_DOWN]]")) {
+          setDown(true);
+          setMessages((m) => m.slice(0, -1));
+          setStreaming(false);
+          return;
+        }
+        // XP arrives as a trailing [[XP:n]] marker (headers are sent before it's known)
+        const xpm = acc.match(/\[\[XP:(\d+)\]\]/);
+        if (xpm && !xpShown) {
+          xpShown = true;
+          const n = Number(xpm[1]);
+          if (n > 0) {
+            setXpToast(n);
+            setTimeout(() => setXpToast(0), 2200);
+          }
+        }
+        const display = acc.replace(/\[\[XP:\d+\]\]/g, "").replace(/\[\[XP:\d*$/, "");
+        setMessages((m) => [...m.slice(0, -1), { role: "assistant", content: display }]);
       }
-      setMessages((m) => [...m.slice(0, -1), { role: "assistant", content: acc }]);
+    } catch {
+      // stream broke mid-answer — keep what we have rather than locking the UI
     }
     setStreaming(false);
   }

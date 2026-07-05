@@ -45,13 +45,19 @@ export default function Courses() {
 
   async function enroll(id: string) {
     setBusy(id);
-    await fetch("/api/courses/enroll", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ courseId: id }),
-    });
-    setEnrolled(new Set(enrolled).add(id));
-    setBusy(null);
+    try {
+      const r = await fetch("/api/courses/enroll", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseId: id }),
+      });
+      if (r.ok) setEnrolled(new Set(enrolled).add(id));
+      else alert("Couldn’t add that subject — try again.");
+    } catch {
+      alert("Couldn’t add that subject — try again.");
+    } finally {
+      setBusy(null);
+    }
   }
 
   return (

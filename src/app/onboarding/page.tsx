@@ -72,42 +72,53 @@ export default function Onboarding() {
 
   async function finish() {
     setBusy(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return router.replace("/login");
-    const survey = {
-      goal,
-      weekly_days: weeklyDays ? Number(weeklyDays) : null,
-      minutes: minutes ? Number(minutes) : null,
-      study_time: studyTime || null,
-      learning_style: learningStyle || null,
-      struggle: struggle || null,
-      confidence: confidence || null,
-      motivation: motivation || null,
-    };
-    await supabase
-      .from("profiles")
-      .update({
-        level,
-        language,
-        goal: goal || null,
-        exam_date: examDate || null,
-        survey,
-        onboarded: true,
-      })
-      .eq("id", user.id);
-    await Promise.all(
-      [...picked].map((courseId) =>
-        fetch("/api/courses/enroll", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ courseId, examDate: examDate || null }),
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return router.replace("/login");
+      const survey = {
+        goal,
+        weekly_days: weeklyDays ? Number(weeklyDays) : null,
+        minutes: minutes ? Number(minutes) : null,
+        study_time: studyTime || null,
+        learning_style: learningStyle || null,
+        struggle: struggle || null,
+        confidence: confidence || null,
+        motivation: motivation || null,
+      };
+      // Enroll FIRST — only commit onboarded=true once at least one subject lands, or the
+      // student can end up onboarded with zero subjects and bounce home <-> onboarding.
+      const ok = await Promise.all(
+        [...picked].map((courseId) =>
+          fetch("/api/courses/enroll", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ courseId, examDate: examDate || null }),
+          })
+            .then((r) => r.ok)
+            .catch(() => false)
+        )
+      );
+      if (!ok.some(Boolean)) {
+        alert("Couldn’t set up your subjects — check your connection and tap “Start learning” again.");
+        return;
+      }
+      await supabase
+        .from("profiles")
+        .update({
+          level,
+          language,
+          goal: goal || null,
+          exam_date: examDate || null,
+          survey,
+          onboarded: true,
         })
-      )
-    );
-    // Straight to the app — don't block first value behind a multi-subject AI diagnostic
-    // (that could take minutes on the free model). Mastery seeds at baseline and the tutor
-    // adapts from the first lesson; a quick level-check stays available optionally.
-    router.replace("/home");
+        .eq("id", user.id);
+      // Straight to the app — don't block first value behind a multi-subject AI diagnostic
+      // (minutes on the free model). Mastery seeds at baseline; the tutor adapts from lesson 1.
+      router.replace("/home");
+    } finally {
+      setBusy(false);
+    }
   }
 
   const canNext =

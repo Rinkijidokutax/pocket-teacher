@@ -176,12 +176,16 @@ export async function POST(req: Request) {
     if (!greetChecked) {
       const nl = assistantText.indexOf("\n");
       if (nl === -1 && !final) return; // wait for the first line before deciding
+      // Only drop a greeting when there is a following line — otherwise a single-line
+      // correction that happens to open with "Hey"/"Hi" (e.g. "Hey, not quite — try again")
+      // would be deleted entirely, leaving the student a blank turn.
       const firstLine = (nl === -1 ? assistantText : assistantText.slice(0, nl)).trim();
       if (
+        nl !== -1 &&
         firstLine.length < 90 &&
         /^(hi|hello|hey|bonjour|salut|good (morning|afternoon|evening|day))\b/i.test(firstLine)
       ) {
-        dropPrefix = nl === -1 ? assistantText.length : nl + 1;
+        dropPrefix = nl + 1;
         flushedLen = dropPrefix;
       }
       greetChecked = true;
@@ -270,11 +274,15 @@ export async function POST(req: Request) {
               role: "assistant",
               content: cleanText,
             });
-          if (xpEarned)
+          if (xpEarned) {
             await supabase
               .from("profiles")
               .update({ xp: (profile.xp ?? 0) + xpEarned })
               .eq("id", user.id);
+            // XP is only known here (after the stream) — the header was already sent, so
+            // deliver it as a trailing marker the client pulls out and strips.
+            controller.enqueue(encoder.encode(`[[XP:${xpEarned}]]`));
+          }
         } catch (e) {
           console.error("chat post-processing error", e);
         }

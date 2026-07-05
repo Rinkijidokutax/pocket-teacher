@@ -209,7 +209,7 @@ export default function Home() {
                   <p className="font-semibold text-sm mt-2 leading-tight">{c.courses?.subject}</p>
                   <p className="eyebrow mt-0.5">{c.courses?.board}</p>
                   {days !== null && (
-                    <p className="text-[11px] mt-2 font-semibold" style={{ color: "var(--streak)" }}>
+                    <p className="text-[11px] mt-2 font-semibold" style={{ color: "var(--streak-text)" }}>
                       {days}d to exam
                     </p>
                   )}

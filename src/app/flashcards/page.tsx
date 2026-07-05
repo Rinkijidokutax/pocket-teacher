@@ -16,6 +16,7 @@ export default function Flashcards() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [doneCount, setDoneCount] = useState(0);
+  const [genErr, setGenErr] = useState("");
 
   async function load(courseId: string) {
     const today = new Date().toISOString().slice(0, 10);
@@ -49,12 +50,18 @@ export default function Flashcards() {
   async function generate() {
     if (!course) return;
     setBusy(true);
-    await fetch("/api/flashcards/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ courseId: course, topicId: topic ?? undefined }),
-    });
-    await load(course);
+    setGenErr("");
+    try {
+      const res = await fetch("/api/flashcards/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseId: course, topicId: topic ?? undefined }),
+      });
+      if (res.ok) await load(course);
+      else setGenErr("Couldn’t make cards just now — give it another tap.");
+    } catch {
+      setGenErr("Couldn’t make cards just now — give it another tap.");
+    }
     setBusy(false);
   }
 
@@ -110,6 +117,11 @@ export default function Flashcards() {
           <button onClick={generate} disabled={busy || !course} className="btn mt-2">
             {busy ? "Making cards…" : "Generate flashcards"}
           </button>
+          {genErr && (
+            <p className="text-sm" style={{ color: "var(--streak-text)" }}>
+              {genErr}
+            </p>
+          )}
         </div>
       ) : (
         <>

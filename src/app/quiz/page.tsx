@@ -58,14 +58,20 @@ export default function Quiz() {
 
   async function submit() {
     setSubmitting(true);
-    const res = await fetch("/api/quiz/submit", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ quizId, answers }),
-    });
-    const out = (await res.json()) as Result;
-    setResult(out);
-    setSubmitting(false);
+    try {
+      const res = await fetch("/api/quiz/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ quizId, answers }),
+      });
+      const out = res.ok ? ((await res.json()) as Result) : null;
+      if (out) setResult(out);
+      else alert("Couldn’t mark the quiz — check your connection and try again.");
+    } catch {
+      alert("Couldn’t mark the quiz — check your connection and try again.");
+    } finally {
+      setSubmitting(false); // never strand the student on 'Marking…'
+    }
   }
 
   if (loading)
