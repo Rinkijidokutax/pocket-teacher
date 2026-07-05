@@ -134,6 +134,14 @@ type Profile = {
   survey?: Survey | null;
 };
 type Course = { subject: string; level: string; board: string; exam_date: string | null } | null;
+export type BookCtx = {
+  title: string;
+  author: string | null;
+  kind: string;
+  edition: string | null;
+  synopsis: string | null;
+  themes: string | null;
+} | null;
 
 function surveyLines(profile: Profile): string {
   const s = profile.survey ?? {};
@@ -159,7 +167,8 @@ export function systemPrompt(
   agenda: Agenda,
   mastery: MasteryRow[],
   materials: { filename: string; extracted_text: string | null }[],
-  firstTurn: boolean
+  firstTurn: boolean,
+  book?: BookCtx
 ): string {
   const weakest = mastery
     .slice(0, 6)
@@ -185,6 +194,23 @@ export function systemPrompt(
 
   const subj = course ? `${course.subject} (${course.board}, ${course.level})` : "their subject";
 
+  const bookBlock = book
+    ? `
+====================  BOOK FOCUS (teach THROUGH this book)  ====================
+"${book.title}"${book.author ? ` by ${book.author}` : ""}${book.edition ? ` — ${book.edition}` : ""}${
+        book.kind === "textbook" ? " (a textbook)" : book.kind === "set_text" ? " (an exam set text)" : ""
+      }
+${book.synopsis ? `About it: ${book.synopsis}` : ""}
+${book.themes ? `Key ${book.kind === "textbook" ? "topics" : "themes"}: ${book.themes}` : ""}
+
+${
+        book.kind === "textbook"
+          ? "Work through the book's topics and worked examples the way it presents them."
+          : "Discuss its characters, themes, plot and language; quote and analyse key moments; set exam-style questions on it."
+      } If you are unsure of a specific detail or exact quote, ask the student or use their uploaded notes — NEVER invent quotes or plot points. Stay homework-safe: guide their analysis, don't write their essay.
+`
+    : "";
+
   // TEACHER_BRAIN (the markdown file) + a live student-context block that adapts every turn.
   return `${TEACHER_BRAIN}
 
@@ -203,7 +229,7 @@ TODAY'S AGENDA:
 ${agenda.review.length ? `1. Quick spaced-repetition review: ${agenda.review.map((r) => `${r.name} [id: ${r.topic_id}]`).join(", ")} — one short question each.` : ""}
 ${agenda.focus ? `${agenda.review.length ? "2" : "1"}. Main focus: ${agenda.focus.name} [id: ${agenda.focus.topic_id}] (mastery ${agenda.focus.score}/100) — teach, then practise.` : ""}
 ${mat ? `\nTHE STUDENT'S OWN UPLOADED MATERIALS (teach from these — use their wording and examples):\n${mat}\n` : ""}
-${
+${bookBlock}${
     firstTurn
       ? `Now begin: greet ${profile.name ?? "the student"} by name in ONE short line, then go straight into the agenda.`
       : `Continue the lesson — do NOT greet again or restart. Respond directly to the student's last message: if they attempted a question, mark their working, say clearly whether it is right or wrong, then add the silent line — [[MASTERY <topic_id> ok]] if right, or [[MASTERY <topic_id> miss | <what they misunderstood in ≤6 words>]] if wrong — for the topic being practised (use its exact [id: ...] above). If they asked something, answer it.`

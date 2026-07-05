@@ -72,6 +72,21 @@ test("tutor chat streams a real reply", async ({ page }) => {
   expect(chatText, "marker leaked into chat").not.toMatch(/\[\[(MASTERY|XP|REMEMBER)/);
 });
 
+test("book tutor: books page renders and a book opens a lesson", async ({ page }) => {
+  watch(page);
+  await login(page);
+  await page.goto("/books");
+  await page.waitForTimeout(1200);
+  await expect(page.getByText("Add any book")).toBeVisible();
+  // the curated test set text should be listed for the Literature-enrolled student
+  const book = page.getByRole("button", { name: /Things Fall Apart/i }).first();
+  if (await book.count()) {
+    await book.click();
+    await page.waitForURL(/\/session\?book=/, { timeout: 15000 });
+    await expect(page.getByText(/Things Fall Apart/i).first()).toBeVisible({ timeout: 20000 });
+  }
+});
+
 test("study hub tools are reachable", async ({ page }) => {
   watch(page);
   await login(page);

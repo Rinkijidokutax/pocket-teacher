@@ -27,10 +27,11 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
 
-  const { sessionId, message, courseId } = (await req.json()) as {
+  const { sessionId, message, courseId, bookId } = (await req.json()) as {
     sessionId?: string;
     message?: string;
     courseId?: string;
+    bookId?: string;
   };
 
   // free-tier daily cap
@@ -102,13 +103,41 @@ export async function POST(req: Request) {
     .eq("status", "ready")
     .limit(6);
 
+  // Optional book focus: load the chosen book + the student's own notes/excerpts on it.
+  let activeBook = bookId ?? null;
+  if (!activeBook && sessionId) {
+    const { data: s } = await supabase
+      .from("sessions")
+      .select("book_id")
+      .eq("id", sessionId)
+      .maybeSingle();
+    activeBook = s?.book_id ?? null;
+  }
+  const { data: book } = activeBook
+    ? await supabase
+        .from("books")
+        .select("title, author, kind, edition, synopsis, themes")
+        .eq("id", activeBook)
+        .maybeSingle()
+    : { data: null };
+  const { data: bookMaterials } = activeBook
+    ? await supabase
+        .from("materials")
+        .select("filename, extracted_text")
+        .eq("user_id", user.id)
+        .eq("book_id", activeBook)
+        .eq("status", "ready")
+        .limit(6)
+    : { data: [] };
+  const allMaterials = [...(materials ?? []), ...(bookMaterials ?? [])];
+
   let sid = sessionId;
   let xpEarned = 0;
   if (!sid) {
     const agenda = buildAgenda(mastery);
     const { data: session } = await supabase
       .from("sessions")
-      .insert({ user_id: user.id, course_id: activeCourse, agenda })
+      .insert({ user_id: user.id, course_id: activeCourse, agenda, book_id: activeBook })
       .select("id")
       .single();
     if (!session)
@@ -150,7 +179,7 @@ export async function POST(req: Request) {
 
   const agenda = buildAgenda(mastery);
   const firstTurn = chron.length === 0;
-  const system = systemPrompt(profile, courseCtx, agenda, mastery, materials ?? [], firstTurn);
+  const system = systemPrompt(profile, courseCtx, agenda, mastery, allMaterials, firstTurn, book);
 
   const mapped: Anthropic.MessageParam[] = chron.map((m) => ({
     role: m.role as "user" | "assistant",

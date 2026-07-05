@@ -125,6 +125,28 @@ export async function genDiagnostic(
   }));
 }
 
+// Best-effort factual synopsis + key themes/topics for a book the student adds. Original
+// wording only — never copyrighted excerpts. If the model doesn't know the book it says so,
+// and the tutor then leans on the student's uploads instead of inventing.
+export async function genBookInfo(
+  title: string,
+  author: string | null,
+  subject: string | null,
+  kind: string
+): Promise<{ synopsis: string; themes: string }> {
+  const txt = await ask(
+    `For the ${kind === "textbook" ? "textbook" : "book"} "${title}"${author ? ` by ${author}` : ""}${
+      subject ? ` (studied in ${subject})` : ""
+    }, write a SHORT factual synopsis (2-3 sentences, your OWN words, NO copyrighted excerpts or quotes) and list its key ${
+      kind === "textbook" ? "topics" : "themes"
+    }. If you are not sure this exact book exists, say so plainly in the synopsis rather than inventing. Format EXACTLY:\nSYNOPSIS: <text>\nTHEMES: <comma-separated list>`,
+    700
+  );
+  const synopsis = txt.match(/SYNOPSIS:\s*([\s\S]*?)(?:\nTHEMES:|$)/i)?.[1]?.trim() || "";
+  const themes = txt.match(/THEMES:\s*(.+)/i)?.[1]?.trim() || "";
+  return { synopsis, themes };
+}
+
 export type SyllabusOut = {
   subject: string;
   level: string;

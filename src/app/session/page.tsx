@@ -58,6 +58,7 @@ export default function Session() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const sessionIdRef = useRef<string | null>(null);
   const courseRef = useRef<string | null>(null);
+  const bookRef = useRef<string | null>(null);
   const startedRef = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -74,8 +75,17 @@ export default function Session() {
       const params = new URLSearchParams(window.location.search);
       const param = params.get("course");
       const topicParam = params.get("topic");
+      const bookParam = params.get("book");
       courseRef.current = param;
-      if (param) {
+      bookRef.current = bookParam;
+      if (bookParam) {
+        const { data: b } = await supabase
+          .from("books")
+          .select("title")
+          .eq("id", bookParam)
+          .maybeSingle();
+        if (b) setSubject(`📖 ${b.title}`);
+      } else if (param) {
         supabase
           .from("courses")
           .select("subject, emoji")
@@ -113,6 +123,7 @@ export default function Session() {
           sessionId: sessionIdRef.current,
           message: text,
           courseId: courseRef.current,
+          bookId: bookRef.current,
         }),
       });
     } catch {
