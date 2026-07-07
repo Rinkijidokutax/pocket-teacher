@@ -52,16 +52,26 @@ export default function Onboarding() {
   const [struggle, setStruggle] = useState("");
   const [confidence, setConfidence] = useState("");
   const [motivation, setMotivation] = useState("");
+  const [coursesLoading, setCoursesLoading] = useState(false);
 
-  useEffect(() => {
-    if (step !== 2 || !level) return;
+  const loadCourses = () => {
+    setCoursesLoading(true);
     supabase
       .from("courses")
       .select("id, subject, emoji, board")
       .eq("is_template", true)
       .eq("level", level)
       .order("subject")
-      .then(({ data }) => setCourses(data ?? []));
+      .then(({ data, error }) => {
+        setCoursesLoading(false);
+        setCourses(error ? [] : data ?? []);
+      });
+  };
+
+  useEffect(() => {
+    if (step !== 2 || !level) return;
+    loadCourses();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, level]);
 
   function toggle(id: string) {
@@ -88,21 +98,26 @@ export default function Onboarding() {
       // Enroll FIRST — only commit onboarded=true once at least one subject lands, or the
       // student can end up onboarded with zero subjects and bounce home <-> onboarding.
       const ok = await Promise.all(
-        [...picked].map((courseId) =>
-          fetch("/api/courses/enroll", {
+        [...picked].map((courseId) => {
+          // Never hang on a stalled connection — cap each enroll at 20s, then fail it.
+          const ctrl = new AbortController();
+          const to = setTimeout(() => ctrl.abort(), 20000);
+          return fetch("/api/courses/enroll", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ courseId, examDate: examDate || null }),
+            signal: ctrl.signal,
           })
             .then((r) => r.ok)
             .catch(() => false)
-        )
+            .finally(() => clearTimeout(to));
+        })
       );
       if (!ok.some(Boolean)) {
         alert("Couldn’t set up your subjects — check your connection and tap “Start learning” again.");
         return;
       }
-      await supabase
+      const { error } = await supabase
         .from("profiles")
         .update({
           level,
@@ -113,6 +128,10 @@ export default function Onboarding() {
           onboarded: true,
         })
         .eq("id", user.id);
+      if (error) {
+        alert("Couldn’t save your profile — check your connection and tap “Start learning” again.");
+        return;
+      }
       // Straight to the app — don't block first value behind a multi-subject AI diagnostic
       // (minutes on the free model). Mastery seeds at baseline; the tutor adapts from lesson 1.
       router.replace("/home");
@@ -200,8 +219,16 @@ export default function Onboarding() {
                 </button>
               ))}
             </div>
-            {courses.length === 0 && (
+            {courses.length === 0 && coursesLoading && (
               <p className="text-[color:var(--ink-faint)] text-sm">Loading subjects…</p>
+            )}
+            {courses.length === 0 && !coursesLoading && (
+              <div className="flex flex-col gap-2 rise">
+                <p className="text-[color:var(--ink-faint)] text-sm">Couldn&apos;t load subjects.</p>
+                <button onClick={loadCourses} className="btn-ghost">
+                  Retry
+                </button>
+              </div>
             )}
           </>
         )}

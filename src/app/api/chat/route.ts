@@ -34,6 +34,18 @@ export async function POST(req: Request) {
     bookId?: string;
   };
 
+  // A passed session must belong to the caller — never read from or write into a foreign
+  // session (RLS covers reads, but message inserts carry our user_id + the given session_id).
+  if (sessionId) {
+    const { data: own } = await supabase
+      .from("sessions")
+      .select("id")
+      .eq("id", sessionId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (!own) return Response.json({ error: "not_found" }, { status: 404 });
+  }
+
   // free-tier daily cap
   const { data: profile } = await supabase
     .from("profiles")
@@ -51,6 +63,8 @@ export async function POST(req: Request) {
   const used = usage?.messages ?? 0;
   if (!FREE_TESTING && !profile.premium && used >= FREE_DAILY_MESSAGES)
     return Response.json({ error: "daily_limit", used }, { status: 402 });
+  // ponytail: read-then-write count; two concurrent sends can both write used+1 and undercount.
+  // Fine while FREE_TESTING disables the cap; swap for an atomic RPC increment before charging.
   await supabase
     .from("usage")
     .upsert({ user_id: user.id, day: today(), messages: used + 1 });
@@ -191,6 +205,17 @@ export async function POST(req: Request) {
     message && mapped.length
       ? mapped
       : [...mapped, { role: "user" as const, content: userText }];
+  // The Anthropic Messages API requires the first turn to be `user`. The kickoff persists only
+  // the assistant greeting, so a continuing turn's history window can begin with it — drop any
+  // leading assistant turns (native-Anthropic models 400 otherwise), keeping ≥1 user turn.
+  while (apiMessages.length && apiMessages[0].role === "assistant") apiMessages.shift();
+  if (apiMessages.length === 0) apiMessages.push({ role: "user", content: userText });
+
+  // Belt-and-braces: the strict parser only strips well-formed [[MASTERY <uuid> ...]] markers.
+  // A malformed/partial one (bad id, stream cut mid-marker) would otherwise leak the secret
+  // bookkeeping line to the student, so at final emission also drop any residual bracket run.
+  const stripBrackets = (t: string) =>
+    stripMasteryMarkers(t).replace(/\[\[[^\]]*\]\]/g, "").replace(/\[\[[^\]]*$/, "");
 
   const encoder = new TextEncoder();
   let assistantText = "";
@@ -203,24 +228,36 @@ export async function POST(req: Request) {
   let greetChecked = firstTurn;
   const flush = (controller: ReadableStreamDefaultController, final: boolean) => {
     if (!greetChecked) {
-      const nl = assistantText.indexOf("\n");
-      if (nl === -1 && !final) return; // wait for the first line before deciding
-      // Only drop a greeting when there is a following line — otherwise a single-line
-      // correction that happens to open with "Hey"/"Hi" (e.g. "Hey, not quite — try again")
-      // would be deleted entirely, leaving the student a blank turn.
-      const firstLine = (nl === -1 ? assistantText : assistantText.slice(0, nl)).trim();
-      if (
-        nl !== -1 &&
-        firstLine.length < 90 &&
-        /^(hi|hello|hey|bonjour|salut|good (morning|afternoon|evening|day))\b/i.test(firstLine)
-      ) {
-        dropPrefix = nl + 1;
-        flushedLen = dropPrefix;
+      // Decide the greeting as early as possible. Wait only for the first WORD; if it isn't a
+      // greeting opener, start streaming immediately — otherwise single-line continuing replies
+      // (which never contain a newline) wouldn't appear until the model finished. If it IS a
+      // greeting opener, wait for the line so we can drop the whole greeting.
+      const ws = assistantText.search(/\s/);
+      if (ws === -1 && !final) return; // first word still arriving
+      const firstWord = (ws === -1 ? assistantText : assistantText.slice(0, ws)).trim();
+      const greetingOpener = /^(hi|hello|hey|bonjour|salut|good)\b/i.test(firstWord);
+      if (!greetingOpener) {
+        greetChecked = true; // clearly not a greeting — stream now
+      } else {
+        const nl = assistantText.indexOf("\n");
+        if (nl === -1 && !final) return; // wait for the greeting line to finish
+        // Only drop a greeting when there is a following line — otherwise a single-line
+        // correction that happens to open with "Hey"/"Hi" (e.g. "Hey, not quite — try again")
+        // would be deleted entirely, leaving the student a blank turn.
+        const firstLine = (nl === -1 ? assistantText : assistantText.slice(0, nl)).trim();
+        if (
+          nl !== -1 &&
+          firstLine.length < 90 &&
+          /^(hi|hello|hey|bonjour|salut|good (morning|afternoon|evening|day))\b/i.test(firstLine)
+        ) {
+          dropPrefix = nl + 1;
+          flushedLen = dropPrefix;
+        }
+        greetChecked = true;
       }
-      greetChecked = true;
     }
     if (final) {
-      const tail = stripMasteryMarkers(assistantText.slice(flushedLen));
+      const tail = stripBrackets(assistantText.slice(flushedLen));
       if (tail) controller.enqueue(encoder.encode(tail));
       flushedLen = assistantText.length;
       return;
@@ -278,7 +315,9 @@ export async function POST(req: Request) {
               { role: "user", content: toolResults },
             ];
           }
-          break; // this model answered
+          if (assistantText) break; // this model answered
+          // 200 with empty/whitespace output (rate-limit / content-filter on free models):
+          // fall through to the next model instead of committing an empty TEACHER_DOWN turn.
         } catch (e) {
           console.error(`chat model ${model} failed:`, (e as Error)?.message ?? e);
           // loop tries the next model — unless text was already streamed (guard above)
@@ -295,7 +334,7 @@ export async function POST(req: Request) {
               xpEarned += await applyMasteryUpdate(supabase, user.id, mk);
             }
           }
-          const cleanText = stripMasteryMarkers(assistantText.slice(dropPrefix)).trim();
+          const cleanText = stripBrackets(assistantText.slice(dropPrefix)).trim();
           if (cleanText)
             await supabase.from("messages").insert({
               session_id: sid,

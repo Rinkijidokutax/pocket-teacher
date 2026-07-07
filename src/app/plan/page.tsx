@@ -20,6 +20,7 @@ export default function Plan() {
   const [course, setCourse] = useState<string | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
 
   async function load(courseId: string) {
     const { data } = await supabase
@@ -49,12 +50,28 @@ export default function Plan() {
   async function regenerate() {
     if (!course) return;
     setBusy(true);
-    await fetch("/api/plan/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ courseId: course }),
-    });
-    await load(course);
+    setErr("");
+    try {
+      const res = await fetch("/api/plan/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseId: course }),
+      });
+      if (res.ok) {
+        await load(course);
+      } else {
+        const out = await res.json().catch(() => ({}));
+        setErr(
+          out.error === "no_mastery"
+            ? "Do a quiz first so we can find your weak topics."
+            : out.error === "no_topics"
+              ? "Add some topics to this course first."
+              : "Couldn’t build your plan just now — give it another tap.",
+        );
+      }
+    } catch {
+      setErr("Couldn’t build your plan just now — give it another tap.");
+    }
     setBusy(false);
   }
 
@@ -82,6 +99,11 @@ export default function Plan() {
           <button onClick={regenerate} disabled={busy || !course} className="btn">
             {busy ? "Building…" : "Build my revision plan"}
           </button>
+          {err && (
+            <p className="text-sm mt-3" style={{ color: "var(--streak-text)" }}>
+              {err}
+            </p>
+          )}
         </div>
       ) : (
         <>
@@ -120,6 +142,11 @@ export default function Plan() {
           <button onClick={regenerate} disabled={busy} className="btn-ghost mt-2">
             {busy ? "Rebuilding…" : "Rebuild plan"}
           </button>
+          {err && (
+            <p className="text-sm" style={{ color: "var(--streak-text)" }}>
+              {err}
+            </p>
+          )}
         </>
       )}
       <Nav />

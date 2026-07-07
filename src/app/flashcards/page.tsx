@@ -18,19 +18,21 @@ export default function Flashcards() {
   const [doneCount, setDoneCount] = useState(0);
   const [genErr, setGenErr] = useState("");
 
-  async function load(courseId: string) {
+  async function load(courseId: string, topicId?: string | null): Promise<number> {
     const today = new Date().toISOString().slice(0, 10);
-    const { data } = await supabase
+    let query = supabase
       .from("flashcards")
       .select("id, front, back, interval_days, reps")
       .eq("course_id", courseId)
-      .lte("review_due", today)
-      .order("review_due")
-      .limit(20);
-    setCards((data ?? []) as Card[]);
+      .lte("review_due", today);
+    if (topicId) query = query.eq("topic_id", topicId);
+    const { data } = await query.order("review_due").limit(20);
+    const rows = (data ?? []) as Card[];
+    setCards(rows);
     setI(0);
     setFlipped(false);
     setLoading(false);
+    return rows.length;
   }
 
   useEffect(() => {
@@ -39,25 +41,29 @@ export default function Flashcards() {
       if (!user) return router.replace("/login");
       const params = new URLSearchParams(window.location.search);
       const c = params.get("course");
+      const t = params.get("topic");
       setCourse(c);
-      setTopic(params.get("topic"));
-      if (c) load(c);
-      else setLoading(false);
+      setTopic(t);
+      if (c) {
+        const n = await load(c, t);
+        // Scheduled 'Flashcards: <topic>' task with nothing due → make a fresh set
+        if (t && n === 0) generate(c, t);
+      } else setLoading(false);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function generate() {
-    if (!course) return;
+  async function generate(courseId = course, topicId = topic) {
+    if (!courseId) return;
     setBusy(true);
     setGenErr("");
     try {
       const res = await fetch("/api/flashcards/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ courseId: course, topicId: topic ?? undefined }),
+        body: JSON.stringify({ courseId, topicId: topicId ?? undefined }),
       });
-      if (res.ok) await load(course);
+      if (res.ok) await load(courseId, topicId);
       else setGenErr("Couldn’t make cards just now — give it another tap.");
     } catch {
       setGenErr("Couldn’t make cards just now — give it another tap.");
@@ -68,11 +74,24 @@ export default function Flashcards() {
   async function rate(gotIt: boolean) {
     const card = cards[i];
     // Server records the spaced-repetition schedule AND credits the streak + XP.
-    fetch("/api/flashcards/review", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cardId: card.id, gotIt }),
-    }).catch(() => {});
+    setBusy(true);
+    setGenErr("");
+    try {
+      const res = await fetch("/api/flashcards/review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cardId: card.id, gotIt }),
+      });
+      if (!res.ok) {
+        setGenErr("Couldn’t save that — give it another tap.");
+        return; // don't drop the review: keep the card, no advance, no 🎉
+      }
+    } catch {
+      setGenErr("Couldn’t save that — give it another tap.");
+      return;
+    } finally {
+      setBusy(false);
+    }
     setDoneCount((d) => d + 1);
     if (i + 1 < cards.length) {
       setI(i + 1);
@@ -114,7 +133,7 @@ export default function Flashcards() {
               ? "They'll come back for review right when you're about to forget them."
               : "Generate a fresh set from your weakest topic."}
           </p>
-          <button onClick={generate} disabled={busy || !course} className="btn mt-2">
+          <button onClick={() => generate()} disabled={busy || !course} className="btn mt-2">
             {busy ? "Making cards…" : "Generate flashcards"}
           </button>
           {genErr && (
@@ -139,13 +158,18 @@ export default function Flashcards() {
           </button>
           {flipped && (
             <div className="flex gap-3 mt-4">
-              <button onClick={() => rate(false)} className="btn-ghost flex-1">
+              <button onClick={() => rate(false)} disabled={busy} className="btn-ghost flex-1">
                 Again
               </button>
-              <button onClick={() => rate(true)} className="btn-accent flex-1">
+              <button onClick={() => rate(true)} disabled={busy} className="btn-accent flex-1">
                 Got it
               </button>
             </div>
+          )}
+          {genErr && (
+            <p className="text-sm mt-3 text-center" style={{ color: "var(--streak-text)" }}>
+              {genErr}
+            </p>
           )}
         </>
       )}

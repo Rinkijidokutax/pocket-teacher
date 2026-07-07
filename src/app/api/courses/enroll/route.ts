@@ -13,9 +13,13 @@ export async function POST(req: Request) {
     examDate?: string;
   };
 
-  await supabase
+  if (examDate && isNaN(Date.parse(examDate)))
+    return Response.json({ error: "invalid_exam_date" }, { status: 400 });
+
+  const { error: enrollError } = await supabase
     .from("enrollments")
     .upsert({ user_id: user.id, course_id: courseId, exam_date: examDate ?? null });
+  if (enrollError) return Response.json({ error: enrollError.message }, { status: 500 });
 
   // seed mastery for every topic in the course (score 20 = not yet assessed)
   const { data: topics } = await supabase

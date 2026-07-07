@@ -195,6 +195,14 @@ export default function Session() {
       // stream broke mid-answer — keep what we have rather than locking the UI
     }
     setStreaming(false);
+    // A turn that streamed only markers (no visible text) would otherwise leave the empty
+    // placeholder bubble stuck on typing dots forever — drop it.
+    setMessages((m) => {
+      const last = m[m.length - 1];
+      return last && last.role === "assistant" && !clean(last.content).trim()
+        ? m.slice(0, -1)
+        : m;
+    });
   }
 
   async function notifyDown() {
@@ -260,7 +268,7 @@ export default function Session() {
 
   return (
     <main className="flex flex-col min-h-screen max-w-md mx-auto w-full">
-      <header className="px-5 pt-12 pb-3 flex justify-between items-center border-b border-[color:var(--line)] bg-[color:var(--paper)]/85 backdrop-blur-xl sticky top-0 z-20">
+      <header className="px-5 pt-[calc(env(safe-area-inset-top)+3rem)] pb-3 flex justify-between items-center border-b border-[color:var(--line)] bg-[color:var(--paper)]/85 backdrop-blur-xl sticky top-0 z-20">
         <button onClick={() => router.push("/home")} className="text-[color:var(--ink-soft)] text-sm">
           ‹ Home
         </button>
@@ -285,7 +293,12 @@ export default function Session() {
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto no-scrollbar px-4 flex flex-col gap-3 py-4 pb-40">
+      <div
+        role="log"
+        aria-live="polite"
+        aria-atomic="false"
+        className="flex-1 overflow-y-auto no-scrollbar px-4 flex flex-col gap-3 py-4 pb-[calc(13rem+env(safe-area-inset-bottom))]"
+      >
         {messages.map((m, i) => (
           <div
             key={i}
@@ -342,7 +355,7 @@ export default function Session() {
         <div ref={bottomRef} />
       </div>
 
-      <form onSubmit={submit} className="fixed bottom-14 inset-x-0 max-w-md mx-auto px-4 pb-3">
+      <form onSubmit={submit} className="fixed bottom-[calc(3.5rem+env(safe-area-inset-bottom))] inset-x-0 max-w-md mx-auto px-4 pb-3">
         <div className="flex gap-2 card p-1.5 items-end">
           <input
             ref={photoRef}
@@ -356,7 +369,8 @@ export default function Session() {
           <label
             htmlFor="snap"
             title="Snap a problem"
-            className={`px-2 text-xl cursor-pointer select-none self-center ${
+            aria-label="Snap a photo of a problem"
+            className={`text-xl cursor-pointer select-none min-w-11 min-h-11 flex items-center justify-center ${
               capped || streaming || down || photoBusy ? "opacity-40 pointer-events-none" : ""
             }`}
           >

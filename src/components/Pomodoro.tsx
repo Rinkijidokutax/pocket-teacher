@@ -58,7 +58,11 @@ export default function Pomodoro() {
         <p className="text-xs text-[color:var(--ink-faint)] mt-0.5">Pomodoro — study in focused bursts</p>
         <div className="flex gap-2 mt-2">
           <button
-            onClick={() => setRunning((r) => !r)}
+            onClick={() => {
+              if (typeof Notification !== "undefined" && Notification.permission === "default")
+                Notification.requestPermission();
+              setRunning((r) => !r);
+            }}
             className="btn-accent px-4 py-1.5 text-xs"
           >
             {running ? "Pause" : "Start"}

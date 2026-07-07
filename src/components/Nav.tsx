@@ -21,6 +21,7 @@ export default function Nav() {
             <Link
               key={t.href}
               href={t.href}
+              aria-current={on ? "page" : undefined}
               className="flex flex-col items-center gap-1 py-2.5 px-4 text-[11px] font-semibold"
             >
               <span

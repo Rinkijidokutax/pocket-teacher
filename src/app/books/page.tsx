@@ -19,6 +19,7 @@ export default function Books() {
   const [author, setAuthor] = useState("");
   const [subject, setSubject] = useState("");
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -63,6 +64,7 @@ export default function Books() {
   async function add() {
     if (!title.trim() || busy) return;
     setBusy(true);
+    setErr("");
     try {
       const res = await fetch("/api/books/add", {
         method: "POST",
@@ -73,9 +75,9 @@ export default function Books() {
       if (out.bookId) {
         const c = courseFor(subject);
         router.push(`/session?book=${out.bookId}${c ? `&course=${c}` : ""}`);
-      } else alert("Couldn’t add that book — try again.");
+      } else setErr("Couldn’t add that book — try again.");
     } catch {
-      alert("Couldn’t add that book — try again.");
+      setErr("Couldn’t add that book — try again.");
     } finally {
       setBusy(false);
     }
@@ -156,6 +158,11 @@ export default function Books() {
             <button onClick={add} disabled={busy || !title.trim()} className="btn">
               {busy ? "Setting up the book…" : "Add & start learning →"}
             </button>
+            {err && (
+              <p className="text-sm rise" style={{ color: "var(--streak-text)" }}>
+                {err}
+              </p>
+            )}
           </section>
         </>
       )}

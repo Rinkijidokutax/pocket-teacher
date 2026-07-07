@@ -27,18 +27,21 @@ export default function Quiz() {
   async function generate(courseId: string, topicId?: string) {
     setLoading(true);
     setResult(null);
-    const res = await fetch("/api/quiz/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ courseId, topicId }),
-    });
-    const out = await res.json().catch(() => ({}));
-    setLoading(false);
-    if (out.quizId) {
-      setQuizId(out.quizId);
-      setTitle(out.title ?? "");
-      setQuestions(out.questions ?? []);
-      setAnswers(new Array((out.questions ?? []).length).fill(-1));
+    try {
+      const res = await fetch("/api/quiz/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseId, topicId }),
+      });
+      const out = await res.json().catch(() => ({}));
+      if (out.quizId) {
+        setQuizId(out.quizId);
+        setTitle(out.title ?? "");
+        setQuestions(out.questions ?? []);
+        setAnswers(new Array((out.questions ?? []).length).fill(-1));
+      }
+    } finally {
+      setLoading(false); // never strand the student on 'Writing your quiz…'
     }
   }
 

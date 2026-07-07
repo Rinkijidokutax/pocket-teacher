@@ -29,16 +29,20 @@ export default function Home() {
     tasks: { id: string; title: string; kind: string; topic_id: string | null; course_id: string }[];
   }>({ reviews: 0, cards: 0, tasks: [] });
   const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState(false);
 
-  useEffect(() => {
-    (async () => {
+  const load = async () => {
+    setError(false);
+    setLoaded(false);
+    try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return router.replace("/login");
-      const { data: p } = await supabase
+      const { data: p, error: pErr } = await supabase
         .from("profiles")
         .select("name, xp, streak, onboarded, reminders")
         .eq("id", user.id)
         .maybeSingle();
+      if (pErr) throw pErr;
       if (!p?.onboarded) return router.replace("/onboarding");
       setProfile({
         name: p.name?.split(" ")[0] ?? "there",
@@ -46,14 +50,16 @@ export default function Home() {
         streak: p.streak ?? 0,
         reminders: !!p.reminders,
       });
-      const { data: e } = await supabase
+      const { data: e, error: eErr } = await supabase
         .from("enrollments")
         .select("course_id, exam_date, courses(subject, emoji, level, board)")
         .eq("user_id", user.id)
         .order("created_at", { ascending: true });
+      if (eErr) throw eErr;
       const en = (e ?? []) as unknown as Enrolled[];
       // Anyone without subjects yet — including users who signed up before the questionnaire
-      // existed — goes through onboarding to map the subjects they need.
+      // existed — goes through onboarding to map the subjects they need. Only route here when
+      // the read SUCCEEDED and genuinely returned nothing — a failed read throws above instead.
       if (en.length === 0) return router.replace("/onboarding");
       setCourses(en);
 
@@ -92,8 +98,28 @@ export default function Home() {
         }[],
       });
       setLoaded(true);
-    })();
+    } catch {
+      // Any thrown read/fetch — never leave the user stuck on "Loading…". Show a retry
+      // instead of misrouting to onboarding on a failed profile/enrollment read.
+      setError(true);
+      setLoaded(true);
+    }
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
+
+  if (error)
+    return (
+      <main className="min-h-screen flex flex-col items-center justify-center gap-4 px-8 text-center">
+        <p className="text-[color:var(--ink-soft)]">Something went wrong</p>
+        <button onClick={load} className="btn">
+          Retry
+        </button>
+      </main>
+    );
 
   if (!loaded || !profile)
     return (

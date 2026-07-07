@@ -109,7 +109,7 @@ export default function Study() {
               <button
                 key={c.course_id}
                 onClick={() => setActive(c.course_id)}
-                className={`chip whitespace-nowrap ${active === c.course_id ? "chip-on" : ""}`}
+                className={`chip whitespace-nowrap min-h-11 ${active === c.course_id ? "chip-on" : ""}`}
               >
                 {c.courses?.emoji} {c.courses?.subject}
               </button>
