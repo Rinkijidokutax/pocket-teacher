@@ -147,6 +147,103 @@ export async function genBookInfo(
   return { synopsis, themes };
 }
 
+// Exam-style questions with marks + a point-by-point mark scheme (SaveMyExams-style, but our
+// own original wording — never copied past-paper text). The tutor/marker grades free-text
+// answers against the scheme, so questions carry the scheme the model can mark against.
+export type MarkPoint = { point: string; marks: number; keywords: string[] };
+export type ExamQ = {
+  type: string;
+  command_word: string;
+  question_md: string;
+  marks: number;
+  difficulty: string;
+  mark_scheme: MarkPoint[];
+  model_answer_md: string;
+};
+
+export async function genExamQuestions(
+  subject: string,
+  topic: string,
+  difficulty = "medium",
+  exam = "",
+  count = 4
+): Promise<ExamQ[]> {
+  const examLine = exam ? ` in the real ${exam} exam style` : "";
+  const txt = await ask(
+    `Write ${count} ORIGINAL exam-style questions${examLine} for a Mauritius ${subject} student on "${topic}". Difficulty: ${difficulty}. Mix command words (Describe, Explain, Calculate, Evaluate, etc.) and mark tariffs (1–6 marks). Write your OWN questions — never copy any real past-paper text.\n\nOutput each question as a block in EXACTLY this format, one blank line between blocks, no other text:\nQ: <the question, ending with the mark tariff e.g. "[4]">\nTYPE: <short|structured|calculation|essay>\nCMD: <the command word, e.g. Explain>\nMARKS: <total marks as a number>\nPOINT: <a creditworthy mark-scheme point> ~ <marks for it> ~ <semicolon-separated keywords>\nPOINT: <another point> ~ <marks> ~ <keywords>\nMODEL: <a concise model answer in your own words>\n\nEvery question needs at least one POINT line; the POINT marks should sum to MARKS.`,
+    3000
+  );
+  const out: ExamQ[] = [];
+  for (const b of txt.split(/\n(?=\s*Q:)/i)) {
+    const lines = b.split("\n");
+    let q = "", type = "short", cmd = "", marks = 0, model = "";
+    const mark_scheme: MarkPoint[] = [];
+    let mode: "q" | "model" | null = null;
+    for (const line of lines) {
+      const mQ = line.match(/^\s*Q:\s*(.*)/i);
+      const mT = line.match(/^\s*TYPE:\s*(.*)/i);
+      const mC = line.match(/^\s*CMD:\s*(.*)/i);
+      const mM = line.match(/^\s*MARKS:\s*(\d+)/i);
+      const mP = line.match(/^\s*POINT:\s*(.*)/i);
+      const mMod = line.match(/^\s*MODEL:\s*(.*)/i);
+      if (mQ) { q = mQ[1].trim(); mode = "q"; }
+      else if (mT) { type = mT[1].trim().toLowerCase() || "short"; mode = null; }
+      else if (mC) { cmd = mC[1].trim(); mode = null; }
+      else if (mM) { marks = parseInt(mM[1], 10); mode = null; }
+      else if (mP) {
+        const parts = mP[1].split("~").map((s) => s.trim());
+        const pm = parseInt(parts[1] || "1", 10) || 1;
+        const kws = (parts[2] || "").split(";").map((s) => s.trim()).filter(Boolean);
+        if (parts[0]) mark_scheme.push({ point: parts[0], marks: pm, keywords: kws });
+        mode = null;
+      } else if (mMod) { model = mMod[1].trim(); mode = "model"; }
+      else if (mode === "q" && line.trim()) q += "\n" + line.trim();
+      else if (mode === "model" && line.trim()) model += "\n" + line.trim();
+    }
+    if (q && mark_scheme.length) {
+      if (!marks) marks = mark_scheme.reduce((s, p) => s + p.marks, 0);
+      out.push({ type, command_word: cmd, question_md: q, marks, difficulty, mark_scheme, model_answer_md: model });
+    }
+  }
+  return out.slice(0, count);
+}
+
+export type Marking = {
+  awarded: number;
+  per_point: { point: string; earned: boolean; note: string }[];
+  feedback: string;
+  misconception: string | null;
+};
+
+// Grade a free-text answer against the mark scheme — the feature neither reference site has.
+export async function markExamAnswer(
+  subject: string,
+  question: string,
+  markScheme: MarkPoint[],
+  answer: string,
+  maxMarks: number
+): Promise<Marking> {
+  const scheme = markScheme
+    .map((p, i) => `${i + 1}. (${p.marks} mark${p.marks > 1 ? "s" : ""}) ${p.point}${p.keywords.length ? ` [keywords: ${p.keywords.join(", ")}]` : ""}`)
+    .join("\n");
+  const txt = await ask(
+    `You are a strict but fair ${subject} examiner. Mark the student's answer against the mark scheme; award a point ONLY if the answer genuinely earns it. Total available: ${maxMarks} marks.\n\nQUESTION:\n${question}\n\nMARK SCHEME:\n${scheme}\n\nSTUDENT ANSWER:\n${answer || "(blank)"}\n\nOutput EXACTLY this format, no other text:\nAWARDED: <total marks earned, a number>\nP1: <yes or no> - <≤12-word reason>\n(one Pn line per mark-scheme point, in order)\nFEEDBACK: <2-3 sentences: what was good, what to add for full marks; encouraging and exam-focused>\nMISS: <the student's key misconception in ≤8 words, or "none">`,
+    1200
+  );
+  const awarded = Math.max(
+    0,
+    Math.min(maxMarks, parseFloat(txt.match(/AWARDED:\s*([\d.]+)/i)?.[1] ?? "0") || 0)
+  );
+  const per_point = markScheme.map((p, i) => {
+    const m = txt.match(new RegExp(`P${i + 1}:\\s*(yes|no)\\s*[-—:]*\\s*(.*)`, "i"));
+    return { point: p.point, earned: /yes/i.test(m?.[1] ?? ""), note: (m?.[2] ?? "").trim() };
+  });
+  const feedback = txt.match(/FEEDBACK:\s*([\s\S]*?)(?:\nMISS:|$)/i)?.[1]?.trim() || "";
+  const missRaw = txt.match(/MISS:\s*(.+)/i)?.[1]?.trim() || "";
+  const misconception = missRaw && !/^none$/i.test(missRaw) ? missRaw : null;
+  return { awarded, per_point, feedback, misconception };
+}
+
 export type SyllabusOut = {
   subject: string;
   level: string;

@@ -7,5 +7,6 @@ export function taskHref(
   const t = topicId ? `&topic=${topicId}` : "";
   if (kind === "quiz") return `/quiz?course=${courseId}${t}`;
   if (kind === "flashcards") return `/flashcards?course=${courseId}${t}`;
+  if (kind === "practice") return `/practice?course=${courseId}${t}`;
   return `/session?course=${courseId}${t}`;
 }

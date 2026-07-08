@@ -88,6 +88,7 @@ export default function Study() {
     { key: "summary", icon: "≣", label: "AI summary", sub: "Notes → revise-ready", onClick: makeSummary },
     { key: "flashcards", icon: "▤", label: "Flashcards", sub: "Active recall", onClick: () => router.push(`/flashcards?course=${active}`) },
     { key: "quiz", icon: "◎", label: "Quiz me", sub: "Adaptive questions", onClick: () => router.push(`/quiz?course=${active}`) },
+    { key: "practice", icon: "✍", label: "Exam practice", sub: "AI-marked exam questions", onClick: () => router.push(`/practice?course=${active}`) },
     { key: "plan", icon: "◱", label: "Revision plan", sub: "Day-by-day to exam", onClick: buildPlan },
     { key: "books", icon: "📖", label: "Book tutor", sub: "Chat about a set text", onClick: () => router.push("/books") },
   ];
