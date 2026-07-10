@@ -20,12 +20,13 @@ export async function POST(req: Request) {
 
   const { data: course } = await supabase
     .from("courses")
-    .select("subject, board, level")
+    .select("subject, board, level, syllabus_code")
     .eq("id", courseId)
     .maybeSingle();
   const subject = course?.subject ?? "your subject";
   const exam = course?.board
-    ? `${course.board} ${(course.level ?? "").toUpperCase().replace(/_/g, " ")}`.trim()
+    ? `${course.board} ${(course.level ?? "").toUpperCase().replace(/_/g, " ")}`.trim() +
+      (course.syllabus_code ? ` (syllabus ${course.syllabus_code})` : "")
     : "";
 
   // resolve topic (given, else weakest in course) + adaptive difficulty from mastery
@@ -79,10 +80,14 @@ export async function POST(req: Request) {
     model_answer_md: q.model_answer_md || null,
     source: "generated",
   }));
-  const { data: inserted } = await supabase
+  const { data: inserted, error: insertErr } = await supabase
     .from("questions")
     .insert(rows)
     .select("id, question_md, marks, command_word, type, difficulty");
+  if (insertErr || !inserted?.length) {
+    console.error("questions insert failed:", insertErr?.message);
+    return Response.json({ error: "save_failed" }, { status: 500 });
+  }
 
-  return Response.json({ ok: true, topic: topicName, difficulty, questions: inserted ?? [] });
+  return Response.json({ ok: true, topic: topicName, difficulty, questions: inserted });
 }

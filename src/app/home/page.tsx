@@ -11,7 +11,7 @@ import { taskHref } from "@/lib/tasks";
 type Enrolled = {
   course_id: string;
   exam_date: string | null;
-  courses: { subject: string; emoji: string; level: string; board: string } | null;
+  courses: { subject: string; emoji: string; level: string; board: string; exam_date: string | null } | null;
 };
 
 export default function Home() {
@@ -52,7 +52,7 @@ export default function Home() {
       });
       const { data: e, error: eErr } = await supabase
         .from("enrollments")
-        .select("course_id, exam_date, courses(subject, emoji, level, board)")
+        .select("course_id, exam_date, courses(subject, emoji, level, board, exam_date)")
         .eq("user_id", user.id)
         .order("created_at", { ascending: true });
       if (eErr) throw eErr;
@@ -222,8 +222,10 @@ export default function Home() {
         ) : (
           <div className="grid grid-cols-2 gap-3">
             {courses.map((c) => {
-              const days = c.exam_date
-                ? Math.ceil((new Date(c.exam_date).getTime() - Date.now()) / 86400000)
+              // Prefer the student's own enrolment date, else fall back to the course's exam date.
+              const examDate = c.exam_date ?? c.courses?.exam_date ?? null;
+              const days = examDate
+                ? Math.ceil((new Date(examDate).getTime() - Date.now()) / 86400000)
                 : null;
               return (
                 <Link

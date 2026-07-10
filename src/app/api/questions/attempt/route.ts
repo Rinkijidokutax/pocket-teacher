@@ -34,16 +34,20 @@ export async function POST(req: Request) {
   const scheme = (q.mark_scheme ?? []) as MarkPoint[];
   const marking = await markExamAnswer(subject, q.question_md, scheme, answer ?? "", q.marks);
 
-  await supabase.from("question_attempts").insert({
+  const { error: attemptErr } = await supabase.from("question_attempts").insert({
     user_id: user.id,
     question_id: q.id,
-    answer: answer ?? "",
+    answer_md: answer ?? "",
     awarded_marks: marking.awarded,
     max_marks: q.marks,
     per_point: marking.per_point,
     feedback_md: marking.feedback,
     misconception: marking.misconception,
   });
+  if (attemptErr) {
+    console.error("question_attempt insert failed:", attemptErr.message);
+    return Response.json({ error: "save_failed" }, { status: 500 });
+  }
 
   // Feed mastery + spaced repetition: half marks or better counts as "got it".
   const gotIt = q.marks > 0 && marking.awarded / q.marks >= 0.5;
