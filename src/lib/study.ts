@@ -157,6 +157,41 @@ export async function genBookInfo(
   return { synopsis, themes };
 }
 
+// "Examiner's report on you" — a warm, honest report generated ENTIRELY from the student's OWN
+// accumulated practice data (their marked question_attempts + recorded misconceptions). 100%
+// original feedback ABOUT this student — never any copyrighted past-paper or published
+// examiner-report text. `stats` is a compact summary the route assembles (not raw rows).
+export type ExaminerStats = {
+  attempts: number;
+  avgPercent: number;
+  weakestTopics: { name: string; score: number }[];
+  recurringMisconceptions: string[];
+  commandWordStats: { word: string; avgPercent: number }[];
+};
+export async function genExaminerReport(
+  subject: string,
+  stats: ExaminerStats,
+  lang = "en"
+): Promise<{ strengths: string; watch: string; next: string }> {
+  const topics = stats.weakestTopics.length
+    ? stats.weakestTopics.map((t) => `${t.name} (${t.score}/100)`).join(", ")
+    : "none flagged yet";
+  const miss = stats.recurringMisconceptions.length
+    ? stats.recurringMisconceptions.join("; ")
+    : "none recorded";
+  const cmds = stats.commandWordStats.length
+    ? stats.commandWordStats.map((c) => `${c.word} ${c.avgPercent}%`).join(", ")
+    : "not enough data yet";
+  const txt = await ask(
+    `You are a warm but honest ${subject} examiner writing a short, personalised report ABOUT ONE STUDENT, based ENTIRELY on their own exam-practice record below. This is 100% original feedback about THIS student — use NO copyrighted material and NO real past-paper or published examiner-report text.\n\nThe student's own record:\n- Exam answers marked: ${stats.attempts}\n- Average score across them: ${stats.avgPercent}%\n- Weakest topics: ${topics}\n- Recurring mistakes they've made: ${miss}\n- Performance by command word (average mark): ${cmds}\n\nEncourage them, but be truthful — ground every claim in the record above. Plain text only, NO markdown, no bullet symbols. Output EXACTLY these three labelled sections, each 2-3 sentences, and nothing else:\nSTRENGTHS: <what they are genuinely doing well>\nWATCH: <the recurring mistakes and weakest topics to be careful of>\nNEXT: <specific, actionable revision priorities>${frLine(lang)}`,
+    800
+  );
+  const strengths = txt.match(/STRENGTHS:\s*([\s\S]*?)(?:\n?WATCH:|$)/i)?.[1]?.trim() || "";
+  const watch = txt.match(/WATCH:\s*([\s\S]*?)(?:\n?NEXT:|$)/i)?.[1]?.trim() || "";
+  const next = txt.match(/NEXT:\s*([\s\S]*)/i)?.[1]?.trim() || "";
+  return { strengths, watch, next };
+}
+
 // Exam-style questions with marks + a point-by-point mark scheme (SaveMyExams-style, but our
 // own original wording — never copied past-paper text). The tutor/marker grades free-text
 // answers against the scheme, so questions carry the scheme the model can mark against.

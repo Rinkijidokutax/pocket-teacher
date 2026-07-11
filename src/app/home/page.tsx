@@ -8,6 +8,8 @@ import XpHeader from "@/components/XpHeader";
 import RemindersButton from "@/components/RemindersButton";
 import { taskHref } from "@/lib/tasks";
 
+const DAILY_GOAL = 30; // XP/day
+
 type Enrolled = {
   course_id: string;
   exam_date: string | null;
@@ -20,6 +22,7 @@ export default function Home() {
     name: string;
     xp: number;
     streak: number;
+    today_xp: number;
     reminders: boolean;
   } | null>(null);
   const [courses, setCourses] = useState<Enrolled[]>([]);
@@ -39,15 +42,19 @@ export default function Home() {
       if (!user) return router.replace("/login");
       const { data: p, error: pErr } = await supabase
         .from("profiles")
-        .select("name, xp, streak, onboarded, reminders")
+        .select("name, xp, streak, today_xp, last_study_date, onboarded, reminders")
         .eq("id", user.id)
         .maybeSingle();
       if (pErr) throw pErr;
       if (!p?.onboarded) return router.replace("/onboarding");
+      // today_xp only means "today" when they studied today — DB resets it lazily on next
+      // record_activity, so a stale last_study_date shows 0.
+      const today = new Date().toISOString().slice(0, 10);
       setProfile({
         name: p.name?.split(" ")[0] ?? "there",
         xp: p.xp ?? 0,
         streak: p.streak ?? 0,
+        today_xp: p.last_study_date === today ? p.today_xp ?? 0 : 0,
         reminders: !!p.reminders,
       });
       const { data: e, error: eErr } = await supabase
@@ -150,6 +157,37 @@ export default function Home() {
       </header>
 
       <XpHeader xp={profile.xp} streak={profile.streak} />
+
+      {(() => {
+        const pct = Math.min(profile.today_xp / DAILY_GOAL, 1);
+        const done = profile.today_xp >= DAILY_GOAL;
+        return (
+          <div className="card p-4 flex items-center gap-4 rise d1">
+            <div
+              className="relative shrink-0"
+              style={{
+                width: 56,
+                height: 56,
+                borderRadius: "999px",
+                background: `conic-gradient(var(--accent) ${pct * 360}deg, var(--paper-2) 0deg)`,
+              }}
+            >
+              <div
+                className="absolute inset-[5px] rounded-full flex items-center justify-center text-sm font-semibold"
+                style={{ background: "var(--paper)", color: "var(--accent)" }}
+              >
+                {done ? "🎉" : `${Math.round(pct * 100)}%`}
+              </div>
+            </div>
+            <div className="flex-1">
+              <p className="eyebrow">Today&apos;s goal</p>
+              <p className="text-sm font-semibold mt-0.5">
+                {profile.today_xp}/{DAILY_GOAL} XP {done && "✓"}
+              </p>
+            </div>
+          </div>
+        );
+      })()}
 
       {first && (
         <Link href={`/session?course=${first.course_id}`} className="btn text-base py-5 rise d1">

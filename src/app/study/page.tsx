@@ -9,12 +9,14 @@ import Pomodoro from "@/components/Pomodoro";
 
 type Course = { course_id: string; courses: { subject: string; emoji: string } | null };
 type Task = { id: string; title: string; kind: string; done: boolean; due: string; topic_id: string | null };
+type Saved = { id: string; title: string; content: string; created_at: string };
 
 export default function Study() {
   const router = useRouter();
   const [courses, setCourses] = useState<Course[]>([]);
   const [active, setActive] = useState<string>("");
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [saved, setSaved] = useState<Saved[]>([]);
   const [summary, setSummary] = useState<{ title: string; content: string } | null>(null);
   const [busy, setBusy] = useState<string>("");
   const [err, setErr] = useState<string>("");
@@ -47,6 +49,23 @@ export default function Study() {
       .eq("done", false)
       .order("due")
       .then(({ data }) => setTasks((data ?? []) as Task[]));
+  }, [active]);
+
+  useEffect(() => {
+    if (!active) return;
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from("summaries")
+          .select("id,title,content,created_at")
+          .eq("course_id", active)
+          .order("created_at", { ascending: false })
+          .limit(10);
+        setSaved((data ?? []) as Saved[]);
+      } catch {
+        setSaved([]);
+      }
+    })();
   }, [active]);
 
   async function makeSummary() {
@@ -146,6 +165,26 @@ export default function Study() {
                 {summary.content}
               </p>
             </div>
+          )}
+
+          {saved.length > 0 && (
+            <section className="rise">
+              <p className="eyebrow mb-2">Saved summaries</p>
+              <div className="flex flex-col gap-2">
+                {saved.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => setSummary({ title: s.title, content: s.content })}
+                    className="card px-4 py-3 flex items-center gap-3 text-left transition hover:-translate-y-0.5"
+                  >
+                    <span className="text-sm flex-1 font-semibold truncate">{s.title}</span>
+                    <span className="eyebrow shrink-0">
+                      {new Date(s.created_at).toLocaleDateString()}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
           )}
 
           <div className="rise">

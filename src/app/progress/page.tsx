@@ -30,6 +30,32 @@ export default function Progress() {
   const [loaded, setLoaded] = useState(false);
   const [copied, setCopied] = useState(false);
   const [shareUrl, setShareUrl] = useState(""); // shown inline if clipboard fails
+  const [report, setReport] = useState<{ strengths: string; watch: string; next: string } | null>(null);
+  const [reportBusy, setReportBusy] = useState(false);
+  const [reportMsg, setReportMsg] = useState("");
+
+  async function genReport() {
+    setReportBusy(true);
+    setReportMsg("");
+    setReport(null);
+    try {
+      const res = await fetch("/api/report/examiner", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseId: active }),
+      });
+      const data = await res.json();
+      if (data?.error === "no_data")
+        setReportMsg("Do some exam practice first — then I can write your report.");
+      else if (!res.ok || !data?.ok)
+        setReportMsg("Could not write your report just now. Try again in a moment.");
+      else setReport(data.report);
+    } catch {
+      setReportMsg("Could not write your report just now. Try again in a moment.");
+    } finally {
+      setReportBusy(false);
+    }
+  }
 
   async function share() {
     const { data: { user } } = await supabase.auth.getUser();
@@ -74,6 +100,8 @@ export default function Progress() {
 
   useEffect(() => {
     if (!active) return;
+    setReport(null);
+    setReportMsg("");
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
@@ -164,6 +192,41 @@ export default function Progress() {
               </section>
             );
           })}
+
+          <section className="card p-5 flex flex-col gap-3 rise">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="eyebrow">Examiner&apos;s report</p>
+                <p className="text-xs text-[color:var(--ink-faint)] mt-1">
+                  Written from your own answers
+                </p>
+              </div>
+              <button onClick={genReport} disabled={reportBusy} className="chip whitespace-nowrap">
+                {reportBusy ? "Reading your answers…" : report ? "Refresh" : "Generate"}
+              </button>
+            </div>
+            {reportMsg && (
+              <p className="text-[13px] text-[color:var(--ink-soft)]">{reportMsg}</p>
+            )}
+            {report && (
+              <div className="flex flex-col gap-3">
+                {([
+                  ["Strengths", report.strengths],
+                  ["Watch", report.watch],
+                  ["Next", report.next],
+                ] as const)
+                  .filter(([, text]) => text)
+                  .map(([label, text]) => (
+                    <div key={label}>
+                      <p className="eyebrow mb-1">{label}</p>
+                      <p className="text-[13px] text-[color:var(--ink-soft)] whitespace-pre-line">
+                        {text}
+                      </p>
+                    </div>
+                  ))}
+              </div>
+            )}
+          </section>
         </>
       )}
       <Nav />
