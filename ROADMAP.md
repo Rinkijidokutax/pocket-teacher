@@ -63,8 +63,9 @@ Cambridge curriculum"), and #3 ("keeps returning to a topic until it's mastered"
 ## Feature phases — status
 - [x] **C1** — real daily-goal ring on Home (`today_xp`, resets on day roll-over) + saved AI summaries resurfaced on Study hub (dbb15cc, live).
 - [x] **C3 (partial) — "Examiner's report on you"** — original STRENGTHS/WATCH/NEXT generated from the student's own `question_attempts` + misconceptions + command-word stats; card on Progress (dbb15cc, live-verified). 100% own-data, no copyrighted content.
-- [ ] **C2 — Past-paper Finder** — HELD: needs verified per-syllabus paper structures; fabricating them risks wrong data + dead/copyright-adjacent links. Do only with sourced structures.
-- [ ] **C3 (rest) — Timed mock exams** to a real paper blueprint (blocked on C2's paper structures).
+- [x] **C2 (safe version) — Exam papers** — `/papers`: generate an ORIGINAL multi-topic AI practice paper (routes into the AI-marked /practice deck) + a verified link to the official Cambridge past-papers finder. Copyright-safe: only external URL is cambridgeinternational.org/past-papers; nothing scraped/hosted (f621704, live-verified).
+- [ ] **C2 (full index) — fabricated-free past-paper catalogue** — DEFERRED: per-syllabus paper structures live in gated, recently-revised PDFs; needs sourced factual data before an accurate year/session/paper index can ship. The /papers feature above covers the student value without it.
+- [ ] **C3 (rest) — Timed mock exams** to a real paper blueprint (needs the sourced paper structures above).
 
 ## Known architectural limits (not quick bugs)
 - **B1/B2 — client-forgeable XP / attempts / mastery:** inherent to the anon-key client architecture (a determined user can only cheat their own numbers). A true fix needs a service-role/edge-function authoritative path — worth it only when data feeds *teacher/school* decisions, not solo revision. Mitigated: `record_activity` caps XP at 60/call.
