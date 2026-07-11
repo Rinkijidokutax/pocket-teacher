@@ -71,6 +71,19 @@ Cambridge curriculum"), and #3 ("keeps returning to a topic until it's mastered"
 - **B1/B2 — client-forgeable XP / attempts / mastery:** inherent to the anon-key client architecture (a determined user can only cheat their own numbers). A true fix needs a service-role/edge-function authoritative path — worth it only when data feeds *teacher/school* decisions, not solo revision. Mitigated: `record_activity` caps XP at 60/call.
 - **A5 — true 24/7:** code-ready via `TUTOR_MODELS` env; needs paid OpenRouter credits or an Anthropic key (Miguel's call).
 
+## Improvement wave (council 6-lens analysis → 8 quick wins, commit 33685ec — live)
+47 ideas analysed → 8 shipped:
+1. **Marker sharpened** — genExamQuestions marks = mark-scheme point-sum (fixes a tariff-cap bug that deflated scores + poisoned mastery); marker gets the model answer + tariff-discipline feedback.
+2. **Content trust** — every generator fenced to the Cambridge syllabus; MCQ self-verify (second solve drops confidently-wrong questions); "AI-generated, check your textbook" labels.
+3. **Graded mastery engine** — scores by the real fraction q=awarded/marks (a 50% no longer = full mastery); SR interval scales with q AND is clamped on-or-before the exam; strong answers clear misconceptions. Threaded through all 3 callers. SR maths unit-checked.
+4. **Cold first turn** — brand-new students get an orienting question; fresh/tied topics fall back to syllabus order (not arbitrary DB order).
+5. **Two phone-first bugs** — chat no longer yanks a reading student to the bottom; practice textarea capped so Submit stays reachable.
+6. **Onboarding + notifications** — peak-intent "enable reminders" step + skippable habit/style steps.
+7. **Targeted daily push** — streak-save / due-count / win-back copy, skips today's studiers; upgraded due_reminders RPC + sw.js deep-link.
+8. **Viral share loop** — shared /report has a "Start your free progress map" CTA; navigator.share with a brag line; OG preview image for WhatsApp.
+
+Bigger bets still queued (council): per-question quiz topic mastery; KaTeX maths rendering; streak-freeze/grace day; AO-band essay marking; skeleton loaders.
+
 ## Recently completed (audit round 2, commit 9471af0 — live)
 13 defects fixed & deployed: marking-outage integrity (no more wrongful 0/N poisoning
 mastery), re-attempt XP farming blocked, answer/difficulty/count input caps, tutor keeps
