@@ -36,7 +36,22 @@ export async function GET(req: Request) {
   const done = new Map(
     (attempts ?? []).map((a) => [a.question_id, { awarded: a.awarded_marks, max: a.max_marks }])
   );
-  const out = (questions ?? []).map((r) => ({ ...r, attempt: done.get(r.id) ?? null }));
+
+  // Command-word coaching: fetch definitions/guidance for the distinct command words in this
+  // deck (one .in query) and attach command_help to each question. Match case-insensitively.
+  const words = [...new Set((questions ?? []).map((r) => r.command_word).filter(Boolean))] as string[];
+  const { data: cmds } = words.length
+    ? await supabase.from("command_words").select("word, definition_md, guidance_md").in("word", words)
+    : { data: [] };
+  const cmdMap = new Map(
+    (cmds ?? []).map((c) => [c.word.toLowerCase(), { definition: c.definition_md, guidance: c.guidance_md }])
+  );
+
+  const out = (questions ?? []).map((r) => ({
+    ...r,
+    attempt: done.get(r.id) ?? null,
+    command_help: r.command_word ? cmdMap.get(r.command_word.toLowerCase()) ?? null : null,
+  }));
   // unattempted first
   out.sort((a, b) => (a.attempt ? 1 : 0) - (b.attempt ? 1 : 0));
 

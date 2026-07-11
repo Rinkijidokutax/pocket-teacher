@@ -9,17 +9,24 @@ async function ask(prompt: string, maxTokens = 2000): Promise<string> {
   return text;
 }
 
+// French mode: one appended sentence. Format labels stay English so the regex parsers still work.
+const frLine = (lang: string) =>
+  lang === "fr"
+    ? " Write everything in French (the student studies in French). Keep the format labels exactly as specified."
+    : "";
+
 export type Flashcard = { front: string; back: string };
 export async function genFlashcards(
   subject: string,
   topic: string,
   source: string | null,
-  count = 10
+  count = 10,
+  lang = "en"
 ): Promise<Flashcard[]> {
   const txt = await ask(
     `Create ${count} active-recall flashcards for a Mauritius ${subject} student revising "${topic}". Cover key facts, definitions and methods for exams.${
       source ? `\n\nBase them on the student's own notes:\n${source.slice(0, 6000)}` : ""
-    }\n\nOutput EACH card on its own line in EXACTLY this format (no numbering, no other text):\nQ: <question> || A: <answer>`,
+    }\n\nOutput EACH card on its own line in EXACTLY this format (no numbering, no other text):\nQ: <question> || A: <answer>${frLine(lang)}`,
     2000
   );
   const cards: Flashcard[] = [];
@@ -74,7 +81,8 @@ export async function genQuiz(
   source: string | null,
   count = 6,
   difficulty = "mixed",
-  exam = ""
+  exam = "",
+  lang = "en"
 ): Promise<QuizQ[]> {
   const examLine = exam
     ? ` Write them in the real ${exam} exam style — use the exam's command words (State, Define, Describe, Explain, Calculate, Evaluate) and mark-scheme-level precision.`
@@ -82,7 +90,7 @@ export async function genQuiz(
   const txt = await ask(
     `Write ${count} exam-style multiple-choice questions for a Mauritius ${subject} student on: ${topics.join(", ")}. Difficulty: ${difficulty}.${examLine} Four options each, one correct, plausible distractors.${
       source ? `\n\nGround them in the student's notes:\n${source.slice(0, 6000)}` : ""
-    }\n\nEvery option must be a REAL, fully written-out answer — never just the letter. Output each question as a block in EXACTLY this format, one blank line between blocks, no other text:\nQ: <question>\nA) <option>\nB) <option>\nC) <option>\nD) <option>\nCORRECT: <A, B, C or D>\nWHY: <one short sentence explaining why the correct answer is right>\n\nExample:\nQ: Which gas do plants absorb during photosynthesis?\nA) Oxygen\nB) Carbon dioxide\nC) Nitrogen\nD) Hydrogen\nCORRECT: B\nWHY: Plants take in carbon dioxide and release oxygen during photosynthesis.`,
+    }\n\nEvery option must be a REAL, fully written-out answer — never just the letter. Output each question as a block in EXACTLY this format, one blank line between blocks, no other text:\nQ: <question>\nA) <option>\nB) <option>\nC) <option>\nD) <option>\nCORRECT: <A, B, C or D>\nWHY: <one short sentence explaining why the correct answer is right>\n\nExample:\nQ: Which gas do plants absorb during photosynthesis?\nA) Oxygen\nB) Carbon dioxide\nC) Nitrogen\nD) Hydrogen\nCORRECT: B\nWHY: Plants take in carbon dioxide and release oxygen during photosynthesis.${frLine(lang)}`,
     2600
   );
   return parseQuizBlocks(txt).slice(0, count);
@@ -91,12 +99,13 @@ export async function genQuiz(
 export async function genSummary(
   subject: string,
   topic: string,
-  source: string | null
+  source: string | null,
+  lang = "en"
 ): Promise<{ title: string; content: string } | null> {
   const txt = await ask(
     `Write a tight revision summary for a Mauritius ${subject} student on "${topic}". Key points, definitions, formulae, common exam traps. Plain text, unicode maths (x², √, π), no markdown.${
       source ? `\n\nSummarise the student's own notes:\n${source.slice(0, 8000)}` : ""
-    }\n\nStart with a line "TITLE: <a short title>", then the summary.`,
+    }\n\nStart with a line "TITLE: <a short title>", then the summary.${frLine(lang)}`,
     1500
   );
   if (!txt.trim()) return null;
@@ -109,11 +118,12 @@ export type DiagQ = { q: string; options: string[]; answer: number; topicIndex: 
 export async function genDiagnostic(
   subject: string,
   topics: string[],
-  exam = ""
+  exam = "",
+  lang = "en"
 ): Promise<DiagQ[]> {
   const list = topics.map((t, i) => `${i}: ${t}`).join("\n");
   const examLine = exam ? ` Use the real ${exam} exam style and its command words.` : "";
-  const prompt = `Write ONE multiple-choice question for EACH of these ${subject} topics, to gauge a Mauritius student's level. Four options each, one correct.${examLine}\n\nTopics:\n${list}\n\nEvery option must be a REAL, fully written-out answer — never just the letter. Output each as a block in EXACTLY this format, one blank line between blocks, no other text:\nQ: <question>\nA) <option>\nB) <option>\nC) <option>\nD) <option>\nCORRECT: <A, B, C or D>\nTOPIC: <the topic number>\n\nExample:\nQ: Which gas do plants absorb during photosynthesis?\nA) Oxygen\nB) Carbon dioxide\nC) Nitrogen\nD) Hydrogen\nCORRECT: B\nTOPIC: 0`;
+  const prompt = `Write ONE multiple-choice question for EACH of these ${subject} topics, to gauge a Mauritius student's level. Four options each, one correct.${examLine}\n\nTopics:\n${list}\n\nEvery option must be a REAL, fully written-out answer — never just the letter. Output each as a block in EXACTLY this format, one blank line between blocks, no other text:\nQ: <question>\nA) <option>\nB) <option>\nC) <option>\nD) <option>\nCORRECT: <A, B, C or D>\nTOPIC: <the topic number>\n\nExample:\nQ: Which gas do plants absorb during photosynthesis?\nA) Oxygen\nB) Carbon dioxide\nC) Nitrogen\nD) Hydrogen\nCORRECT: B\nTOPIC: 0${frLine(lang)}`;
   // Single call — no retry. The diagnostic is optional and low-stakes (seeds a baseline),
   // and a second AI call risked doubling latency into a multi-minute wait.
   const parsed = parseQuizBlocks(await ask(prompt, 2600), true);
@@ -166,11 +176,12 @@ export async function genExamQuestions(
   topic: string,
   difficulty = "medium",
   exam = "",
-  count = 4
+  count = 4,
+  lang = "en"
 ): Promise<ExamQ[]> {
   const examLine = exam ? ` in the real ${exam} exam style` : "";
   const txt = await ask(
-    `Write ${count} ORIGINAL exam-style questions${examLine} for a Mauritius ${subject} student on "${topic}". Difficulty: ${difficulty}. Mix command words (Describe, Explain, Calculate, Evaluate, etc.) and mark tariffs (1–6 marks). Write your OWN questions — never copy any real past-paper text.\n\nOutput each question as a block in EXACTLY this format, one blank line between blocks, no other text:\nQ: <the question, ending with the mark tariff e.g. "[4]">\nTYPE: <short|structured|calculation|essay>\nCMD: <the command word, e.g. Explain>\nMARKS: <total marks as a number>\nPOINT: <a creditworthy mark-scheme point> ~ <marks for it> ~ <semicolon-separated keywords>\nPOINT: <another point> ~ <marks> ~ <keywords>\nMODEL: <a concise model answer in your own words>\n\nEvery question needs at least one POINT line; the POINT marks should sum to MARKS.`,
+    `Write ${count} ORIGINAL exam-style questions${examLine} for a Mauritius ${subject} student on "${topic}". Difficulty: ${difficulty}. Mix command words (Describe, Explain, Calculate, Evaluate, etc.) and mark tariffs (1–6 marks). Write your OWN questions — never copy any real past-paper text.\n\nOutput each question as a block in EXACTLY this format, one blank line between blocks, no other text:\nQ: <the question, ending with the mark tariff e.g. "[4]">\nTYPE: <short|structured|calculation|essay>\nCMD: <the command word, e.g. Explain>\nMARKS: <total marks as a number>\nPOINT: <a creditworthy mark-scheme point> ~ <marks for it> ~ <semicolon-separated keywords>\nPOINT: <another point> ~ <marks> ~ <keywords>\nMODEL: <a concise model answer in your own words>\n\nEvery question needs at least one POINT line; the POINT marks should sum to MARKS.${frLine(lang)}`,
     3000
   );
   const out: ExamQ[] = [];
@@ -223,13 +234,15 @@ export async function markExamAnswer(
   question: string,
   markScheme: MarkPoint[],
   answer: string,
-  maxMarks: number
+  maxMarks: number,
+  commandHelp?: string
 ): Promise<Marking | null> {
   const scheme = markScheme
     .map((p, i) => `${i + 1}. (${p.marks} mark${p.marks > 1 ? "s" : ""}) ${p.point}${p.keywords.length ? ` [keywords: ${p.keywords.join(", ")}]` : ""}`)
     .join("\n");
+  const cmdLine = commandHelp ? `\n\nCOMMAND WORD GUIDANCE: ${commandHelp}` : "";
   const txt = await ask(
-    `You are a fair, encouraging ${subject} examiner marking like a real Cambridge examiner. Total available: ${maxMarks} marks.\n\nMARKING RULES:\n- Award a point if the answer conveys the CORRECT IDEA, even if the wording, synonyms or phrasing differ from the mark scheme. The keywords are a guide, NOT a requirement — do not insist on exact words.\n- Credit points made anywhere in the answer, in any order.\n- Give benefit of the doubt on a borderline point; only withhold a mark if the idea is genuinely absent or wrong.\n- Never double-penalise the same mistake, and never deduct below 0.\n\nQUESTION:\n${question}\n\nMARK SCHEME (each point is worth its stated marks):\n${scheme}\n\nSTUDENT ANSWER:\n${answer || "(blank)"}\n\nOutput EXACTLY this format, no other text:\nAWARDED: <total marks earned, a number — may be a decimal for partial credit>\nP1: <yes or no> - <≤12-word reason>\n(one Pn line per mark-scheme point, in order)\nFEEDBACK: <2-3 sentences: what was good first, then what to add for full marks; warm and exam-focused>\nMISS: <the student's key misconception in ≤8 words, or "none" if the answer was largely sound>`,
+    `You are a fair, encouraging ${subject} examiner marking like a real Cambridge examiner. Total available: ${maxMarks} marks.${cmdLine}\n\nMARKING RULES:\n- Award a point if the answer conveys the CORRECT IDEA, even if the wording, synonyms or phrasing differ from the mark scheme. The keywords are a guide, NOT a requirement — do not insist on exact words.\n- Credit points made anywhere in the answer, in any order.\n- Give benefit of the doubt on a borderline point; only withhold a mark if the idea is genuinely absent or wrong.\n- Never double-penalise the same mistake, and never deduct below 0.\n\nQUESTION:\n${question}\n\nMARK SCHEME (each point is worth its stated marks):\n${scheme}\n\nSTUDENT ANSWER:\n${answer || "(blank)"}\n\nOutput EXACTLY this format, no other text:\nAWARDED: <total marks earned, a number — may be a decimal for partial credit>\nP1: <yes or no> - <≤12-word reason>\n(one Pn line per mark-scheme point, in order)\nFEEDBACK: <2-3 sentences: what was good first, then what to add for full marks; if the answer misreads the command word, say so explicitly; warm and exam-focused>\nMISS: <the student's key misconception in ≤8 words, or "none" if the answer was largely sound>`,
     1200
   );
   // No text or no AWARDED line = the marker didn't run properly — never fabricate a zero.

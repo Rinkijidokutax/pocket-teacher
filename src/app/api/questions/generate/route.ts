@@ -29,6 +29,13 @@ export async function POST(req: Request) {
       (course.syllabus_code ? ` (syllabus ${course.syllabus_code})` : "")
     : "";
 
+  const { data: prof } = await supabase
+    .from("profiles")
+    .select("language")
+    .eq("id", user.id)
+    .maybeSingle();
+  const lang = prof?.language ?? "en";
+
   // resolve topic (given, else weakest in course) + adaptive difficulty from mastery
   let tid = topicId ?? null;
   let topicName = "key concepts";
@@ -67,7 +74,7 @@ export async function POST(req: Request) {
     : score < 40 ? "easy" : score < 70 ? "medium" : "hard";
   const n = Math.min(Math.max(Math.round(Number(count)) || 4, 1), 6);
 
-  const qs = await genExamQuestions(subject, topicName, difficulty, exam, n);
+  const qs = await genExamQuestions(subject, topicName, difficulty, exam, n, lang);
   if (!qs.length) return Response.json({ error: "generation_failed" }, { status: 502 });
 
   const rows = qs.map((q) => ({

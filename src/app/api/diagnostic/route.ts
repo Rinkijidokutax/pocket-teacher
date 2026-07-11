@@ -20,6 +20,13 @@ export async function POST(req: Request) {
     ? `${course.board} ${(course.level ?? "").toUpperCase().replace(/_/g, " ")}`.trim()
     : "";
 
+  const { data: prof } = await supabase
+    .from("profiles")
+    .select("language")
+    .eq("id", user.id)
+    .maybeSingle();
+  const lang = prof?.language ?? "en";
+
   const { data: topics } = await supabase
     .from("topics")
     .select("id, name")
@@ -33,7 +40,7 @@ export async function POST(req: Request) {
   const step = Math.max(1, Math.floor(all.length / n));
   const picked = Array.from({ length: n }, (_, i) => all[Math.min(i * step, all.length - 1)]);
 
-  const qs = (await genDiagnostic(subject, picked.map((t) => t.name), exam)).slice(0, 6);
+  const qs = (await genDiagnostic(subject, picked.map((t) => t.name), exam, lang)).slice(0, 6);
   if (!qs.length) return Response.json({ ok: true, quizId: null, questions: [] });
 
   const questions = qs.map((q) => ({

@@ -19,6 +19,13 @@ export async function POST(req: Request) {
     : { data: null };
   const subject = course?.subject ?? "your subject";
 
+  const { data: prof } = await supabase
+    .from("profiles")
+    .select("language")
+    .eq("id", user.id)
+    .maybeSingle();
+  const lang = prof?.language ?? "en";
+
   let topic = "revision";
   let source: string | null = null;
   if (topicId) {
@@ -36,7 +43,7 @@ export async function POST(req: Request) {
     if (!topicId) topic = m?.filename ?? topic;
   }
 
-  const out = await genSummary(subject, topic, source);
+  const out = await genSummary(subject, topic, source, lang);
   if (!out) return Response.json({ error: "generation_failed" }, { status: 502 });
 
   const { data: row } = await supabase

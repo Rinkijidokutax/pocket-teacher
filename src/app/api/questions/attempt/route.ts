@@ -17,7 +17,7 @@ export async function POST(req: Request) {
 
   const { data: q } = await supabase
     .from("questions")
-    .select("id, question_md, marks, mark_scheme, model_answer_md, topic_id, course_id, is_template, owner_id")
+    .select("id, question_md, marks, command_word, mark_scheme, model_answer_md, topic_id, course_id, is_template, owner_id")
     .eq("id", questionId)
     .maybeSingle();
   // RLS already limits reads to own + templates; double-check ownership for a per-user question.
@@ -42,9 +42,20 @@ export async function POST(req: Request) {
   const isRepeat = !!prior;
 
   const scheme = (q.mark_scheme ?? []) as MarkPoint[];
+  // Feed the command word's definition + examiner expectation into the marker so it can flag
+  // misread command words. Skip the lookup when the question carries no command word.
+  let commandHelp: string | undefined;
+  if (q.command_word) {
+    const { data: cw } = await supabase
+      .from("command_words")
+      .select("definition_md, guidance_md")
+      .eq("word", q.command_word)
+      .maybeSingle();
+    if (cw) commandHelp = `${cw.definition_md} ${cw.guidance_md}`;
+  }
   // Cap the answer reaching the marker prompt — no student answer legitimately needs more.
   const ans = (answer ?? "").slice(0, 4000);
-  const marking = await markExamAnswer(subject, q.question_md, scheme, ans, q.marks);
+  const marking = await markExamAnswer(subject, q.question_md, scheme, ans, q.marks, commandHelp);
   // Marker unavailable (model outage/format drift) — fail loudly, never record a false zero.
   if (!marking) return Response.json({ error: "marking_unavailable" }, { status: 502 });
 

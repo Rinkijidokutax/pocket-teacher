@@ -12,6 +12,7 @@ type Question = {
   command_word: string | null;
   type: string;
   difficulty: string;
+  command_help?: { definition: string; guidance: string } | null;
 };
 type Result = {
   awarded: number;
@@ -43,6 +44,7 @@ export default function Practice() {
   const [marking, setMarking] = useState(false);
   const [err, setErr] = useState("");
   const [xpToast, setXpToast] = useState(0);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   async function load(courseId: string, topicId: string | null, difficulty: Diff) {
     setLoadingQ(true);
@@ -57,6 +59,7 @@ export default function Practice() {
       setI(0);
       setAnswer("");
       setResult(null);
+      setHelpOpen(false);
     } catch {
       // offline/drop: show the error, don't leave the previous course's deck on screen
       setQuestions([]);
@@ -149,6 +152,7 @@ export default function Practice() {
     setI((n) => n + 1);
     setAnswer("");
     setResult(null);
+    setHelpOpen(false);
   }
 
   const q = questions[i];
@@ -226,7 +230,15 @@ export default function Practice() {
           ) : q ? (
             <div className="card p-5 flex flex-col gap-4 rise">
               <div className="flex items-center gap-2 flex-wrap">
-                {q.command_word && <span className="chip">{q.command_word}</span>}
+                {q.command_word && (
+                  <button
+                    onClick={() => setHelpOpen((v) => !v)}
+                    className={`chip ${helpOpen ? "chip-on" : ""}`}
+                  >
+                    {q.command_word}
+                    {q.command_help ? " ⓘ" : ""}
+                  </button>
+                )}
                 <span className="chip chip-on">
                   {q.marks} mark{q.marks === 1 ? "" : "s"}
                 </span>
@@ -234,6 +246,14 @@ export default function Practice() {
                   {i + 1}/{questions.length}
                 </span>
               </div>
+
+              {helpOpen && q.command_help && (
+                <div className="card p-3 text-sm text-[color:var(--ink-soft)] leading-relaxed">
+                  <p className="font-semibold">{q.command_word}</p>
+                  <p className="mt-1">{q.command_help.definition}</p>
+                  <p className="mt-1">{q.command_help.guidance}</p>
+                </div>
+              )}
 
               <p className="text-sm leading-relaxed whitespace-pre-wrap">{q.question_md}</p>
 

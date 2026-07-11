@@ -28,6 +28,27 @@ export default function Progress() {
   const [active, setActive] = useState<string>("");
   const [rows, setRows] = useState<Row[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [shareUrl, setShareUrl] = useState(""); // shown inline if clipboard fails
+
+  async function share() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data } = await supabase
+      .from("profiles")
+      .select("share_token")
+      .eq("id", user.id)
+      .single();
+    if (!data?.share_token) return;
+    const url = `${window.location.origin}/report?t=${data.share_token}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setShareUrl(url);
+    }
+  }
 
   useEffect(() => {
     (async () => {
@@ -78,7 +99,15 @@ export default function Progress() {
 
   return (
     <main className="flex-1 px-6 pt-14 pb-28 max-w-md mx-auto w-full flex flex-col gap-5 min-h-screen">
-      <h1 className="display text-3xl font-semibold rise">Your map</h1>
+      <div className="flex items-center justify-between gap-3 rise">
+        <h1 className="display text-3xl font-semibold">Your map</h1>
+        <button onClick={share} className="chip whitespace-nowrap">
+          {copied ? "Link copied!" : "Share with teacher →"}
+        </button>
+      </div>
+      {shareUrl && (
+        <p className="text-xs text-[color:var(--ink-faint)] break-all -mt-2 rise">{shareUrl}</p>
+      )}
       {profile && <XpHeader xp={profile.xp} streak={profile.streak} />}
 
       {!loaded ? (

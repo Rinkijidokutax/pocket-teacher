@@ -94,7 +94,12 @@ export function buildAgenda(rows: MasteryRow[]): Agenda {
     .slice(0, 2)
     .map((r) => ({ topic_id: r.topic_id, name: r.topics?.name ?? r.topic_id, score: r.score }));
 
-  const focusRow = rows.find((r) => !due.some((d) => d.topic_id === r.topic_id));
+  // Mastery gate: a topic the student has STARTED but not yet mastered (score < 60) keeps
+  // the focus before any fresh topic — "don't move on until it's genuinely understood".
+  // Rows are sorted score-ascending, so within each group the weakest still wins.
+  const notDue = (r: MasteryRow) => !due.some((d) => d.topic_id === r.topic_id);
+  const focusRow =
+    rows.find((r) => r.attempts > 0 && r.score < 60 && notDue(r)) ?? rows.find(notDue);
   const focus = focusRow
     ? {
         topic_id: focusRow.topic_id,
@@ -211,11 +216,16 @@ ${
 `
     : "";
 
+  const frLine =
+    profile.language === "fr"
+      ? "IMPORTANT: This student's app language is FRENCH. Teach in French by default (switch only if they write in English).\n"
+      : "";
+
   // TEACHER_BRAIN (the markdown file) + a live student-context block that adapts every turn.
   return `${TEACHER_BRAIN}
 
 ====================  THIS STUDENT (adapt to everything here)  ====================
-Subject today: ${subj}
+${frLine}Subject today: ${subj}
 Name: ${profile.name ?? "Student"} · Streak: ${profile.streak} days${daysToExam !== null ? ` · Exam in ${daysToExam} days` : ""}
 
 From their questionnaire:

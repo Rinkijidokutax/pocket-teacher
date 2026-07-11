@@ -23,6 +23,13 @@ export async function POST(req: Request) {
     .maybeSingle();
   const subject = course?.subject ?? "your subject";
 
+  const { data: prof } = await supabase
+    .from("profiles")
+    .select("language")
+    .eq("id", user.id)
+    .maybeSingle();
+  const lang = prof?.language ?? "en";
+
   // pick the topic: explicit, else the student's weakest in this course
   let topicName = "key concepts";
   let tid = topicId ?? null;
@@ -57,7 +64,7 @@ export async function POST(req: Request) {
     source = m?.extracted_text ?? null;
   }
 
-  const cards = await genFlashcards(subject, topicName, source, count ?? 10);
+  const cards = await genFlashcards(subject, topicName, source, count ?? 10, lang);
   if (!cards.length) return Response.json({ error: "generation_failed" }, { status: 502 });
 
   const { error: insErr } = await supabase.from("flashcards").insert(

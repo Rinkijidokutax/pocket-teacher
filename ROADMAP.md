@@ -37,14 +37,14 @@ Cambridge curriculum"), and #3 ("keeps returning to a topic until it's mastered"
 
 ## Opus 4.8 action plan (in execution order)
 
-### A. Close the email-claim gaps
-- [ ] **A1 — Mastery gate (small):** `buildAgenda` keeps the previous focus topic until score ≥ 60 (one condition in `tutor.ts:97`) + one `teacher.md` line ("stay on the focus topic until 2 correct in a row"). Makes claim #3 literally true.
-- [ ] **A2 — Command-word coaching (small):** GET `/api/questions` joins `command_words` on the question's command word; the chip on `/practice` becomes tappable → shows definition + examiner expectation; inject the definition into `markExamAnswer`'s feedback prompt. (24-row table is seeded but currently dead data.)
-- [ ] **A3 — Quiz-from-notes (small):** thread `materialId` through `/api/quiz/generate` into `genQuiz`'s existing `source` param (~10 lines) + a Quiz button on ready materials in `library/page.tsx`. Then smoke-test one photo + one PDF upload live (paths are coded but never exercised in prod).
-- [ ] **A4 — French mode (medium):** thread `profile.language` into `systemPrompt()` ("Teach in French" when `fr`) + add a `lang` param to the 5 `study.ts` prompt builders (summaries/flashcards/quizzes/diagnostic/exam-questions). UI stays English for now — honest minimum for the bilingual claim.
-- [ ] **A5 — Any-hour reliability (tiny):** add a paid last-resort rung to `CHAT_MODELS` (OpenRouter credits or `ANTHROPIC_API_KEY`) so free-quota exhaustion degrades gracefully instead of TEACHER_DOWN. **Needs Miguel's OK (costs money).**
-- [ ] **A6 — Shareable progress report (small):** `share_token` on profiles (1-line migration) + server-rendered `/report/[token]` page reusing the existing mastery-map query. Lets a student show their teacher/parent real progress — the honest v1 of the teacher story.
-- [ ] **A7 — Curriculum tightening (small):** set `syllabus_code` on all 65 Cambridge template courses (only 10 done); pass syllabus context into quiz + diagnostic generation (exam-questions already does).
+### A. Close the email-claim gaps — DONE except A5
+- [x] **A1 — Mastery gate:** started-but-unmastered topics (score < 60) keep the focus before fresh topics + teacher.md golden rule 7. Claim #3 now true.
+- [x] **A2 — Command-word coaching:** command_help joined into GET /api/questions, tappable chip on /practice shows definition + examiner expectation, marker prompt flags misread command words. Claim #7 now true.
+- [x] **A3 — Quiz-from-notes:** materialId → /api/quiz/generate → genQuiz source; ◎ Quiz button on ready materials. Claim #9 now true (photo/PDF live smoke-test still pending).
+- [x] **A4 — French mode:** systemPrompt teaches in French when profile.language='fr'; lang threaded through all 5 generators (format labels stay English for parsing). Claim #11 now honest.
+- [ ] **A5 — Any-hour reliability (tiny):** paid last-resort rung via TUTOR_MODELS env (OpenRouter credits or ANTHROPIC_API_KEY). **Waiting on Miguel (costs money).**
+- [x] **A6 — Shareable progress report:** share_token + report_by_token() RPC (SECURITY DEFINER, progress-only) + public /report?t= page + "Share with teacher →" on Progress. Claims #13/#14 now match the reworded email.
+- [x] **A7 — Curriculum tightening:** syllabus_code seeded on all 50 Cambridge courses; syllabus context in exam-question generation. NOTE: 40 codes seeded from model knowledge — human-verify the less common ones (languages, Divinity 9011, Islamic Studies 2068) against cambridgeinternational.org before past-paper links ship.
 
 ### B. Remaining verified bugs (deferred, non-blocking)
 - [ ] **B1:** mark schemes/model answers readable pre-attempt via direct PostgREST (row-level RLS only). Motivated cheaters only cheat themselves in practice; fix before mock exams matter (move solutions to a guarded table or SECURITY DEFINER getter).

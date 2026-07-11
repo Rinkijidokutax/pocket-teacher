@@ -227,6 +227,13 @@ export default function Library() {
                 >
                   {matBusy === m.id + ":c" ? "…" : "▤ Flashcards"}
                 </button>
+                <button
+                  onClick={() => router.push(`/quiz?course=${m.course_id}&material=${m.id}`)}
+                  disabled={!m.course_id}
+                  className="chip flex-1 justify-center py-1.5"
+                >
+                  ◎ Quiz
+                </button>
               </div>
             )}
             {matSummary?.id === m.id && (

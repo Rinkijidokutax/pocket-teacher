@@ -8,8 +8,19 @@ export async function POST(req: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
 
-  const { courseId, topicId } = (await req.json()) as { courseId: string; topicId?: string };
+  const { courseId, topicId, materialId } = (await req.json()) as {
+    courseId: string;
+    topicId?: string;
+    materialId?: string;
+  };
   if (!courseId) return Response.json({ error: "no_course" }, { status: 400 });
+
+  const { data: prof } = await supabase
+    .from("profiles")
+    .select("language")
+    .eq("id", user.id)
+    .maybeSingle();
+  const lang = prof?.language ?? "en";
 
   const { data: course } = await supabase
     .from("courses")
@@ -58,7 +69,19 @@ export async function POST(req: Request) {
   }
   const difficulty = score < 40 ? "easy" : score < 70 ? "medium" : "hard";
 
-  const questions = await genQuiz(subject, [topicName], null, 6, difficulty, exam);
+  // Quiz-from-notes: ground the quiz in the student's own material when one is passed.
+  let source: string | null = null;
+  if (materialId) {
+    const { data: m } = await supabase
+      .from("materials")
+      .select("extracted_text")
+      .eq("id", materialId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    source = m?.extracted_text ?? null;
+  }
+
+  const questions = await genQuiz(subject, [topicName], source, 6, difficulty, exam, lang);
   if (!questions.length) return Response.json({ error: "generation_failed" }, { status: 502 });
 
   const withTopic = questions.map((q) => ({ ...q, topic_id: tid }));
