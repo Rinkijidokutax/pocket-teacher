@@ -121,18 +121,30 @@ export async function genQuiz(
   exam = "",
   lang = "en",
   unit?: string,
-  siblingTopics?: string[]
+  siblingTopics?: string[],
+  quizTopics?: { id: string; name: string }[]
 ): Promise<QuizQ[]> {
   const examLine = exam
     ? ` Write them in the real ${exam} exam style — use the exam's command words (State, Define, Describe, Explain, Calculate, Evaluate) and mark-scheme-level precision.`
     : "";
+  // When the caller supplies the quiz's real topics, number them and have each question tag
+  // its topic (TOPIC: <n>) — same mechanism as genDiagnostic — so mastery updates per topic.
+  // Single-topic case is trivially TOPIC 0.
+  const perTopic = !!quizTopics?.length;
+  const topicList = perTopic
+    ? `\n\nTag each question with the number of the topic it tests:\n${quizTopics!
+        .map((t, i) => `${i}: ${t.name}`)
+        .join("\n")}`
+    : "";
+  const topicFmt = perTopic ? `\nTOPIC: <the topic number it tests>` : "";
+  const topicEg = perTopic ? `\nTOPIC: 0` : "";
   const txt = await ask(
-    `Write ${count} exam-style multiple-choice questions for a Mauritius ${subject} student on: ${topics.join(", ")}. Difficulty: ${difficulty}.${examLine} Four options each, one correct, plausible distractors.${
+    `Write ${count} exam-style multiple-choice questions for a Mauritius ${subject} student on: ${topics.join(", ")}. Difficulty: ${difficulty}.${examLine} Four options each, one correct, plausible distractors.${topicList}${
       source ? `\n\nGround them in the student's notes:\n${source.slice(0, 6000)}` : ""
-    }\n\nEvery option must be a REAL, fully written-out answer — never just the letter. Output each question as a block in EXACTLY this format, one blank line between blocks, no other text:\nQ: <question>\nA) <option>\nB) <option>\nC) <option>\nD) <option>\nCORRECT: <A, B, C or D>\nWHY: <one short sentence explaining why the correct answer is right>\n\nExample:\nQ: Which gas do plants absorb during photosynthesis?\nA) Oxygen\nB) Carbon dioxide\nC) Nitrogen\nD) Hydrogen\nCORRECT: B\nWHY: Plants take in carbon dioxide and release oxygen during photosynthesis.${guardLine(exam || subject, unit, siblingTopics)}${frLine(lang)}`,
+    }\n\nEvery option must be a REAL, fully written-out answer — never just the letter. Output each question as a block in EXACTLY this format, one blank line between blocks, no other text:\nQ: <question>\nA) <option>\nB) <option>\nC) <option>\nD) <option>\nCORRECT: <A, B, C or D>\nWHY: <one short sentence explaining why the correct answer is right>${topicFmt}\n\nExample:\nQ: Which gas do plants absorb during photosynthesis?\nA) Oxygen\nB) Carbon dioxide\nC) Nitrogen\nD) Hydrogen\nCORRECT: B\nWHY: Plants take in carbon dioxide and release oxygen during photosynthesis.${topicEg}${guardLine(exam || subject, unit, siblingTopics)}${frLine(lang)}`,
     2600
   );
-  return verifyMCQs(parseQuizBlocks(txt).slice(0, count));
+  return verifyMCQs(parseQuizBlocks(txt, perTopic).slice(0, count));
 }
 
 export async function genSummary(

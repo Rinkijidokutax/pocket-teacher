@@ -81,10 +81,17 @@ export async function POST(req: Request) {
     source = m?.extracted_text ?? null;
   }
 
-  const questions = await genQuiz(subject, [topicName], source, 6, difficulty, exam, lang);
+  // Pass the quiz's real topic(s) so each question can carry its own topic_id for per-topic
+  // mastery on submit. Today the route resolves a single topic, but the list keeps it open.
+  const quizTopics = tid ? [{ id: tid, name: topicName }] : [];
+  const questions = await genQuiz(subject, [topicName], source, 6, difficulty, exam, lang, undefined, undefined, quizTopics);
   if (!questions.length) return Response.json({ error: "generation_failed" }, { status: 502 });
 
-  const withTopic = questions.map((q) => ({ ...q, topic_id: tid }));
+  // Resolve each question's TOPIC index → concrete topic_id; fall back to the single topic (tid).
+  const withTopic = questions.map((q) => ({
+    ...q,
+    topic_id: quizTopics[Math.min(q.topicIndex ?? 0, quizTopics.length - 1)]?.id ?? tid,
+  }));
   const { data: quiz } = await supabase
     .from("quizzes")
     .insert({ user_id: user.id, course_id: courseId, topic_id: tid, title: topicName, questions: withTopic })

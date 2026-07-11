@@ -75,6 +75,24 @@ export default function Onboarding() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, level]);
 
+  // Returning users (flipped onboarded before this questionnaire existed, or redoing it) keep
+  // their level/language + already-enrolled subjects pre-filled instead of restarting blank.
+  // Only set from non-null so a fresh signup isn't clobbered with defaults.
+  useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const [{ data: p }, { data: en }] = await Promise.all([
+        supabase.from("profiles").select("level, language").eq("id", user.id).maybeSingle(),
+        supabase.from("enrollments").select("course_id").eq("user_id", user.id),
+      ]);
+      if (p?.level) setLevel(p.level);
+      if (p?.language) setLanguage(p.language);
+      if (en && en.length) setPicked(new Set(en.map((e) => e.course_id)));
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function toggle(id: string) {
     const n = new Set(picked);
     n.has(id) ? n.delete(id) : n.add(id);

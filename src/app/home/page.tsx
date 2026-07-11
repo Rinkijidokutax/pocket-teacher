@@ -24,6 +24,7 @@ export default function Home() {
     streak: number;
     today_xp: number;
     reminders: boolean;
+    streak_freezes: number;
   } | null>(null);
   const [courses, setCourses] = useState<Enrolled[]>([]);
   const [due, setDue] = useState<{
@@ -42,11 +43,18 @@ export default function Home() {
       if (!user) return router.replace("/login");
       const { data: p, error: pErr } = await supabase
         .from("profiles")
-        .select("name, xp, streak, today_xp, last_study_date, onboarded, reminders")
+        .select("name, xp, streak, today_xp, last_study_date, onboarded, reminders, survey, streak_freezes")
         .eq("id", user.id)
         .maybeSingle();
       if (pErr) throw pErr;
       if (!p?.onboarded) return router.replace("/onboarding");
+      // Existing users were flipped onboarded=true with an EMPTY survey {}, so they never did the
+      // questionnaire that calibrates the app. Gate on genuine completion — a truthy `goal` (the
+      // only required step; steps 4/5 are skippable, so DON'T require their fields or skippers loop).
+      // Fires even for onboarded users who already have subjects.
+      const survey = (p.survey ?? {}) as Record<string, unknown>;
+      const surveyDone = Object.keys(survey).length > 0 && !!survey.goal;
+      if (!surveyDone) return router.replace("/onboarding");
       // today_xp only means "today" when they studied today — DB resets it lazily on next
       // record_activity, so a stale last_study_date shows 0.
       const today = new Date().toISOString().slice(0, 10);
@@ -56,6 +64,7 @@ export default function Home() {
         streak: p.streak ?? 0,
         today_xp: p.last_study_date === today ? p.today_xp ?? 0 : 0,
         reminders: !!p.reminders,
+        streak_freezes: p.streak_freezes ?? 0,
       });
       const { data: e, error: eErr } = await supabase
         .from("enrollments")
@@ -157,6 +166,18 @@ export default function Home() {
       </header>
 
       <XpHeader xp={profile.xp} streak={profile.streak} />
+
+      {profile.streak_freezes > 0 && (
+        <div className="flex justify-end -mt-3 rise d1">
+          <span
+            aria-label="Streak freezes — protect your streak on a missed day"
+            className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+            style={{ background: "var(--paper-2)", color: "var(--ink-soft)" }}
+          >
+            🧊 {profile.streak_freezes}
+          </span>
+        </div>
+      )}
 
       <div className="flex justify-end -mt-2 rise d1">
         <Link href="/progress" className="text-xs font-semibold" style={{ color: "var(--accent)" }}>
