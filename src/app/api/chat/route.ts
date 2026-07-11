@@ -174,9 +174,8 @@ export async function POST(req: Request) {
     profile.streak = streak;
   }
 
-  const userText =
-    message ??
-    "(The student just opened today's session. Greet them and begin the agenda.)";
+  const OPENER = "(The student just opened today's session. Greet them and begin the agenda.)";
+  const userText = message ?? OPENER;
   if (message)
     await supabase
       .from("messages")
@@ -206,16 +205,22 @@ export async function POST(req: Request) {
       ? mapped
       : [...mapped, { role: "user" as const, content: userText }];
   // The Anthropic Messages API requires the first turn to be `user`. The kickoff persists only
-  // the assistant greeting, so a continuing turn's history window can begin with it — drop any
-  // leading assistant turns (native-Anthropic models 400 otherwise), keeping ≥1 user turn.
-  while (apiMessages.length && apiMessages[0].role === "assistant") apiMessages.shift();
+  // the assistant greeting, so a continuing turn's history window can begin with it. Do NOT
+  // drop the greeting — it contains the tutor's opening question, and losing it means the model
+  // can't tell what the student is answering. Prepend the synthetic opener instead.
+  if (apiMessages.length && apiMessages[0].role === "assistant")
+    apiMessages.unshift({ role: "user", content: OPENER });
   if (apiMessages.length === 0) apiMessages.push({ role: "user", content: userText });
 
   // Belt-and-braces: the strict parser only strips well-formed [[MASTERY <uuid> ...]] markers.
   // A malformed/partial one (bad id, stream cut mid-marker) would otherwise leak the secret
-  // bookkeeping line to the student, so at final emission also drop any residual bracket run.
+  // bookkeeping line to the student, so at final emission also drop residual MARKER bracket
+  // runs — but only marker-shaped ones, so legitimate teaching text like the matrix "[[3, 4]]"
+  // or a Python nested list survives.
   const stripBrackets = (t: string) =>
-    stripMasteryMarkers(t).replace(/\[\[[^\]]*\]\]/g, "").replace(/\[\[[^\]]*$/, "");
+    stripMasteryMarkers(t)
+      .replace(/\[\[\s*(?:MASTERY|XP|REMEMBER|TEACHER)[^\]]*\]\]/gi, "")
+      .replace(/\[\[\s*(?:MASTERY|XP|REMEMBER|TEACHER)[^\]]*$/i, "");
 
   const encoder = new TextEncoder();
   let assistantText = "";
@@ -232,9 +237,11 @@ export async function POST(req: Request) {
       // greeting opener, start streaming immediately — otherwise single-line continuing replies
       // (which never contain a newline) wouldn't appear until the model finished. If it IS a
       // greeting opener, wait for the line so we can drop the whole greeting.
-      const ws = assistantText.search(/\s/);
+      // Free models often open with a newline/space — judge the first REAL word, not index 0.
+      const lead = assistantText.trimStart();
+      const ws = lead.search(/\s/);
       if (ws === -1 && !final) return; // first word still arriving
-      const firstWord = (ws === -1 ? assistantText : assistantText.slice(0, ws)).trim();
+      const firstWord = ws === -1 ? lead : lead.slice(0, ws);
       const greetingOpener = /^(hi|hello|hey|bonjour|salut|good)\b/i.test(firstWord);
       if (!greetingOpener) {
         greetChecked = true; // clearly not a greeting — stream now
@@ -276,7 +283,7 @@ export async function POST(req: Request) {
       // Try each model in the fallback chain. Fall back only if a model dies BEFORE it
       // streams any text — once the student is seeing an answer we commit to that model.
       for (const model of CHAT_MODELS) {
-        if (assistantText) break;
+        if (assistantText.trim()) break;
         try {
           let msgs = apiMessages;
           for (let turn = 0; turn < 4; turn++) {
@@ -315,7 +322,7 @@ export async function POST(req: Request) {
               { role: "user", content: toolResults },
             ];
           }
-          if (assistantText) break; // this model answered
+          if (assistantText.trim()) break; // this model answered
           // 200 with empty/whitespace output (rate-limit / content-filter on free models):
           // fall through to the next model instead of committing an empty TEACHER_DOWN turn.
         } catch (e) {
@@ -324,7 +331,7 @@ export async function POST(req: Request) {
         }
       }
 
-      if (assistantText) {
+      if (assistantText.trim()) {
         try {
           flush(controller, true); // flush the held-back tail (markers stripped)
           // Free models record mastery via the [[MASTERY ...]] marker; parse + apply it.
@@ -343,10 +350,9 @@ export async function POST(req: Request) {
               content: cleanText,
             });
           if (xpEarned) {
-            await supabase
-              .from("profiles")
-              .update({ xp: (profile.xp ?? 0) + xpEarned })
-              .eq("id", user.id);
+            // Atomic in the DB — the profile row was read at request start and free-model
+            // streams run for minutes; a read-modify-write here can erase XP earned meanwhile.
+            await supabase.rpc("record_activity", { p_xp: xpEarned });
             // XP is only known here (after the stream) — the header was already sent, so
             // deliver it as a trailing marker the client pulls out and strips.
             controller.enqueue(encoder.encode(`[[XP:${xpEarned}]]`));

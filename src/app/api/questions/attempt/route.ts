@@ -31,13 +31,27 @@ export async function POST(req: Request) {
     .maybeSingle();
   const subject = course?.subject ?? "your subject";
 
+  // Re-attempts after the mark scheme was revealed still get marked, but earn no XP/mastery.
+  const { data: prior } = await supabase
+    .from("question_attempts")
+    .select("id")
+    .eq("user_id", user.id)
+    .eq("question_id", q.id)
+    .limit(1)
+    .maybeSingle();
+  const isRepeat = !!prior;
+
   const scheme = (q.mark_scheme ?? []) as MarkPoint[];
-  const marking = await markExamAnswer(subject, q.question_md, scheme, answer ?? "", q.marks);
+  // Cap the answer reaching the marker prompt — no student answer legitimately needs more.
+  const ans = (answer ?? "").slice(0, 4000);
+  const marking = await markExamAnswer(subject, q.question_md, scheme, ans, q.marks);
+  // Marker unavailable (model outage/format drift) — fail loudly, never record a false zero.
+  if (!marking) return Response.json({ error: "marking_unavailable" }, { status: 502 });
 
   const { error: attemptErr } = await supabase.from("question_attempts").insert({
     user_id: user.id,
     question_id: q.id,
-    answer_md: answer ?? "",
+    answer_md: ans,
     awarded_marks: marking.awarded,
     max_marks: q.marks,
     per_point: marking.per_point,
@@ -50,16 +64,20 @@ export async function POST(req: Request) {
   }
 
   // Feed mastery + spaced repetition: half marks or better counts as "got it".
+  // First attempt only — re-attempts after the scheme was revealed earn nothing.
   const gotIt = q.marks > 0 && marking.awarded / q.marks >= 0.5;
-  if (q.topic_id)
-    await applyMasteryUpdate(supabase, user.id, {
-      topic_id: q.topic_id,
-      gotIt,
-      misconception: marking.misconception ?? undefined,
-    });
-  // XP scales with marks earned; a strong answer earns a bonus. Also credits the daily streak.
-  const xp = Math.round(marking.awarded * 2) + (gotIt ? 5 : 0);
-  await recordActivity(supabase, user.id, xp);
+  let xp = 0;
+  if (!isRepeat) {
+    if (q.topic_id)
+      await applyMasteryUpdate(supabase, user.id, {
+        topic_id: q.topic_id,
+        gotIt,
+        misconception: marking.misconception ?? undefined,
+      });
+    // XP scales with marks earned; a strong answer earns a bonus. Also credits the daily streak.
+    xp = Math.round(marking.awarded * 2) + (gotIt ? 5 : 0);
+    await recordActivity(supabase, user.id, xp);
+  }
 
   return Response.json({
     ok: true,

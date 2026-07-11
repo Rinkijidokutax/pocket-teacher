@@ -61,9 +61,13 @@ export async function POST(req: Request) {
     score = m?.score ?? 40;
   }
   if (!tid) return Response.json({ error: "no_topic" }, { status: 400 });
-  const difficulty = reqDiff || (score < 40 ? "easy" : score < 70 ? "medium" : "hard");
+  // whitelist difficulty; clamp count to 1..6 (NaN/0/negative would poison the prompt)
+  const difficulty = ["easy", "medium", "hard"].includes(reqDiff ?? "")
+    ? (reqDiff as string)
+    : score < 40 ? "easy" : score < 70 ? "medium" : "hard";
+  const n = Math.min(Math.max(Math.round(Number(count)) || 4, 1), 6);
 
-  const qs = await genExamQuestions(subject, topicName, difficulty, exam, Math.min(count ?? 4, 6));
+  const qs = await genExamQuestions(subject, topicName, difficulty, exam, n);
   if (!qs.length) return Response.json({ error: "generation_failed" }, { status: 502 });
 
   const rows = qs.map((q) => ({

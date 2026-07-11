@@ -34,10 +34,12 @@ async function compressImage(file: File): Promise<File> {
 }
 
 function clean(t: string): string {
+  // NOTE: no lookbehind regexes here — they fail to PARSE on Safari/iOS < 16.4 and would
+  // crash the whole session page on older iPhones (common among students).
   return t
     .replace(/\*?\(\s*(?:note|nb)[^)]*mastery[^)]*\)\*?/gi, "")
     .replace(/\*\*(.+?)\*\*/g, "$1")
-    .replace(/(?<![\w*])\*(?=\S)([^*\n]+?)(?<=\S)\*(?![\w*])/g, "$1")
+    .replace(/(^|[^\w*])\*(\S(?:[^*\n]*?\S)?)\*(?![\w*])/g, "$1$2")
     .replace(/^#{1,6}\s+/gm, "")
     .trimEnd();
 }

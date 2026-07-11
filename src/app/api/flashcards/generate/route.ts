@@ -60,7 +60,7 @@ export async function POST(req: Request) {
   const cards = await genFlashcards(subject, topicName, source, count ?? 10);
   if (!cards.length) return Response.json({ error: "generation_failed" }, { status: 502 });
 
-  await supabase.from("flashcards").insert(
+  const { error: insErr } = await supabase.from("flashcards").insert(
     cards.map((c) => ({
       user_id: user.id,
       course_id: courseId,
@@ -69,6 +69,12 @@ export async function POST(req: Request) {
       back: c.back,
     }))
   );
+  // Don't report created:N on a failed insert — the scheduled-task auto-generate path would
+  // show "No cards due" forever while claiming success.
+  if (insErr) {
+    console.error("flashcards insert failed:", insErr.message);
+    return Response.json({ error: "save_failed" }, { status: 502 });
+  }
 
   return Response.json({ ok: true, created: cards.length, topic: topicName });
 }

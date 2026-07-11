@@ -216,13 +216,15 @@ export type Marking = {
 };
 
 // Grade a free-text answer against the mark scheme — the feature neither reference site has.
+// Returns null when no model produced a parseable marking (outage/format drift) so callers
+// can fail loudly instead of recording a wrongful 0/N that would poison mastery.
 export async function markExamAnswer(
   subject: string,
   question: string,
   markScheme: MarkPoint[],
   answer: string,
   maxMarks: number
-): Promise<Marking> {
+): Promise<Marking | null> {
   const scheme = markScheme
     .map((p, i) => `${i + 1}. (${p.marks} mark${p.marks > 1 ? "s" : ""}) ${p.point}${p.keywords.length ? ` [keywords: ${p.keywords.join(", ")}]` : ""}`)
     .join("\n");
@@ -230,10 +232,10 @@ export async function markExamAnswer(
     `You are a fair, encouraging ${subject} examiner marking like a real Cambridge examiner. Total available: ${maxMarks} marks.\n\nMARKING RULES:\n- Award a point if the answer conveys the CORRECT IDEA, even if the wording, synonyms or phrasing differ from the mark scheme. The keywords are a guide, NOT a requirement — do not insist on exact words.\n- Credit points made anywhere in the answer, in any order.\n- Give benefit of the doubt on a borderline point; only withhold a mark if the idea is genuinely absent or wrong.\n- Never double-penalise the same mistake, and never deduct below 0.\n\nQUESTION:\n${question}\n\nMARK SCHEME (each point is worth its stated marks):\n${scheme}\n\nSTUDENT ANSWER:\n${answer || "(blank)"}\n\nOutput EXACTLY this format, no other text:\nAWARDED: <total marks earned, a number — may be a decimal for partial credit>\nP1: <yes or no> - <≤12-word reason>\n(one Pn line per mark-scheme point, in order)\nFEEDBACK: <2-3 sentences: what was good first, then what to add for full marks; warm and exam-focused>\nMISS: <the student's key misconception in ≤8 words, or "none" if the answer was largely sound>`,
     1200
   );
-  const awarded = Math.max(
-    0,
-    Math.min(maxMarks, parseFloat(txt.match(/AWARDED:\s*([\d.]+)/i)?.[1] ?? "0") || 0)
-  );
+  // No text or no AWARDED line = the marker didn't run properly — never fabricate a zero.
+  const awardedRaw = txt.match(/AWARDED:\s*([\d.]+)/i)?.[1];
+  if (!txt.trim() || awardedRaw === undefined) return null;
+  const awarded = Math.max(0, Math.min(maxMarks, parseFloat(awardedRaw) || 0));
   const per_point = markScheme.map((p, i) => {
     const m = txt.match(new RegExp(`P${i + 1}:\\s*(yes|no)\\s*[-—:]*\\s*(.*)`, "i"));
     return { point: p.point, earned: /yes/i.test(m?.[1] ?? ""), note: (m?.[2] ?? "").trim() };

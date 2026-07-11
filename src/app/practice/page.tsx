@@ -57,6 +57,10 @@ export default function Practice() {
       setI(0);
       setAnswer("");
       setResult(null);
+    } catch {
+      // offline/drop: show the error, don't leave the previous course's deck on screen
+      setQuestions([]);
+      setErr("Couldn’t load questions — check your connection.");
     } finally {
       setLoadingQ(false);
     }
@@ -83,12 +87,12 @@ export default function Practice() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Reload the deck whenever the active course or difficulty changes.
+  // Reload the deck whenever the active course, topic filter or difficulty changes.
   useEffect(() => {
     if (!active) return;
     load(active, topic, diff);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, diff]);
+  }, [active, diff, topic]);
 
   async function generate() {
     if (!active) return;
@@ -180,7 +184,9 @@ export default function Practice() {
             {courses.map((c) => (
               <button
                 key={c.course_id}
-                onClick={() => setActive(c.course_id)}
+                // The ?topic= filter belongs to the course the task linked to — clear it when
+                // switching subjects or every other course shows an empty/foreign deck.
+                onClick={() => { setActive(c.course_id); setTopic(null); }}
                 className={`chip whitespace-nowrap min-h-11 ${active === c.course_id ? "chip-on" : ""}`}
               >
                 {c.courses?.emoji} {c.courses?.subject}

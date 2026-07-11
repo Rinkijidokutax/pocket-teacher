@@ -224,9 +224,10 @@ export default function Home() {
             {courses.map((c) => {
               // Prefer the student's own enrolment date, else fall back to the course's exam date.
               const examDate = c.exam_date ?? c.courses?.exam_date ?? null;
-              const days = examDate
+              const rawDays = examDate
                 ? Math.ceil((new Date(examDate).getTime() - Date.now()) / 86400000)
                 : null;
+              const days = rawDays !== null && rawDays >= 0 ? rawDays : null; // past exams: hide, don't show "-12d"
               return (
                 <Link
                   key={c.course_id}

@@ -91,7 +91,13 @@ export async function POST(req: Request) {
       tasks.push({ user_id: user.id, course_id: courseId, topic_id: t.topic_id, due, title, kind });
     }
   }
-  await supabase.from("study_tasks").insert(tasks);
+  // The old plan was already deleted above — an unchecked failed insert would wipe the
+  // student's schedule and still report success.
+  const { error: insErr } = await supabase.from("study_tasks").insert(tasks);
+  if (insErr) {
+    console.error("study_tasks insert failed:", insErr.message);
+    return Response.json({ error: "save_failed" }, { status: 500 });
+  }
 
   return Response.json({ ok: true, created: tasks.length, daysToExam });
 }
