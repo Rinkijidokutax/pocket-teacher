@@ -21,10 +21,11 @@ self.addEventListener("push", (e) => {
     self.registration.showNotification(data.title ?? "Pocket Teacher", {
       body: data.body ?? "Time for today's lesson 📚",
       icon: "/icon-192.png",
+      data: { url: data.url ?? "/home" },
     })
   );
 });
 self.addEventListener("notificationclick", (e) => {
   e.notification.close();
-  e.waitUntil(self.clients.openWindow("/home"));
+  e.waitUntil(self.clients.openWindow(e.notification.data?.url ?? "/home"));
 });

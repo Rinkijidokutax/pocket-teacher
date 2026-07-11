@@ -26,10 +26,13 @@ export async function POST(req: Request) {
 
   const { data: course } = await supabase
     .from("courses")
-    .select("subject")
+    .select("subject, exam_date")
     .eq("id", q.course_id)
     .maybeSingle();
   const subject = course?.subject ?? "your subject";
+  const daysToExam = course?.exam_date
+    ? Math.ceil((new Date(course.exam_date).getTime() - Date.now()) / 86400000)
+    : null;
 
   // Re-attempts after the mark scheme was revealed still get marked, but earn no XP/mastery.
   const { data: prior } = await supabase
@@ -55,7 +58,9 @@ export async function POST(req: Request) {
   }
   // Cap the answer reaching the marker prompt — no student answer legitimately needs more.
   const ans = (answer ?? "").slice(0, 4000);
-  const marking = await markExamAnswer(subject, q.question_md, scheme, ans, q.marks, commandHelp);
+  const marking = await markExamAnswer(
+    subject, q.question_md, scheme, ans, q.marks, commandHelp, q.model_answer_md ?? undefined
+  );
   // Marker unavailable (model outage/format drift) — fail loudly, never record a false zero.
   if (!marking) return Response.json({ error: "marking_unavailable" }, { status: 502 });
 
@@ -74,15 +79,18 @@ export async function POST(req: Request) {
     return Response.json({ error: "save_failed" }, { status: 500 });
   }
 
-  // Feed mastery + spaced repetition: half marks or better counts as "got it".
+  // Feed mastery + spaced repetition with the EXACT graded fraction (partial marks matter).
   // First attempt only — re-attempts after the scheme was revealed earn nothing.
-  const gotIt = q.marks > 0 && marking.awarded / q.marks >= 0.5;
+  const frac = q.marks > 0 ? marking.awarded / q.marks : 0;
+  const gotIt = frac >= 0.5;
   let xp = 0;
   if (!isRepeat) {
     if (q.topic_id)
       await applyMasteryUpdate(supabase, user.id, {
         topic_id: q.topic_id,
         gotIt,
+        q: frac,
+        daysToExam,
         misconception: marking.misconception ?? undefined,
       });
     // XP scales with marks earned; a strong answer earns a bonus. Also credits the daily streak.

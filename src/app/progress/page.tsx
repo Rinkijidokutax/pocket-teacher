@@ -67,6 +67,21 @@ export default function Progress() {
       .single();
     if (!data?.share_token) return;
     const url = `${window.location.origin}/report?t=${data.share_token}`;
+    // Native share sheet (mobile) — feature-detected. A cancel throws AbortError, so the
+    // catch just swallows it: cancelling must not surface an error or fall through to a toast.
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: "My Pocket Teacher progress",
+          text: "Here's my revision progress on Pocket Teacher 📈",
+          url,
+        });
+      } catch {
+        // ponytail: user cancelled or share failed — nothing to show
+      }
+      return;
+    }
+    // Fallback (desktop / no Web Share) — copy the link.
     try {
       await navigator.clipboard.writeText(url);
       setCopied(true);
@@ -130,7 +145,7 @@ export default function Progress() {
       <div className="flex items-center justify-between gap-3 rise">
         <h1 className="display text-3xl font-semibold">Your map</h1>
         <button onClick={share} className="chip whitespace-nowrap">
-          {copied ? "Link copied!" : "Share with teacher →"}
+          {copied ? "Link copied!" : "Share my progress →"}
         </button>
       </div>
       {shareUrl && (

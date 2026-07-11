@@ -171,6 +171,9 @@ export default function Flashcards() {
               {genErr}
             </p>
           )}
+          <p className="text-[11px] text-[color:var(--ink-faint)] mt-4 text-center">
+            AI-generated — double-check with your textbook.
+          </p>
         </>
       )}
       <Nav />

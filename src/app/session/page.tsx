@@ -63,9 +63,10 @@ export default function Session() {
   const bookRef = useRef<string | null>(null);
   const startedRef = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const pinRef = useRef(true); // stick to bottom only while the student is already there
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (pinRef.current) bottomRef.current?.scrollIntoView({ behavior: "auto" });
   }, [messages]);
 
   useEffect(() => {
@@ -112,7 +113,10 @@ export default function Session() {
 
   async function send(text: string | null) {
     if (streaming) return;
-    if (text) setMessages((m) => [...m, { role: "user", content: text }]);
+    if (text) {
+      pinRef.current = true; // a fresh student message always snaps to the bottom
+      setMessages((m) => [...m, { role: "user", content: text }]);
+    }
     setStreaming(true);
     setMessages((m) => [...m, { role: "assistant", content: "" }]);
 
@@ -299,6 +303,10 @@ export default function Session() {
         role="log"
         aria-live="polite"
         aria-atomic="false"
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          pinRef.current = el.scrollTop + el.clientHeight >= el.scrollHeight - 120;
+        }}
         className="flex-1 overflow-y-auto no-scrollbar px-4 flex flex-col gap-3 py-4 pb-[calc(13rem+env(safe-area-inset-bottom))]"
       >
         {messages.map((m, i) => (

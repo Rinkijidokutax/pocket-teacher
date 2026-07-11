@@ -26,9 +26,13 @@ export async function POST(req: Request) {
   const total = qs.length;
   const passed = total > 0 && score / total >= 0.6;
 
-  // update mastery on the quiz's topic, award quiz XP
+  // update mastery on the quiz's topic using the graded fraction (not just pass/fail)
   if (quiz.topic_id)
-    await applyMasteryUpdate(supabase, user.id, { topic_id: quiz.topic_id, gotIt: passed });
+    await applyMasteryUpdate(supabase, user.id, {
+      topic_id: quiz.topic_id,
+      gotIt: passed,
+      q: total > 0 ? score / total : 0,
+    });
   // Credit XP AND the daily streak — finishing a quiz counts toward the habit, not just chat.
   const xp = score * 3 + (passed ? 10 : 0);
   await recordActivity(supabase, user.id, xp);

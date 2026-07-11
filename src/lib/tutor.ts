@@ -49,7 +49,7 @@ export type MasteryRow = {
   review_due: string | null;
   last_reviewed: string | null;
   misconceptions: string[];
-  topics: { name: string; unit: string; course_id: string } | null;
+  topics: { name: string; unit: string; course_id: string; sort: number } | null;
 };
 
 export type Agenda = {
@@ -77,7 +77,7 @@ export async function loadMastery(
   let q = supabase
     .from("mastery")
     .select(
-      "topic_id, score, attempts, interval_days, review_due, last_reviewed, misconceptions, topics(name, unit, course_id)"
+      "topic_id, score, attempts, interval_days, review_due, last_reviewed, misconceptions, topics(name, unit, course_id, sort)"
     )
     .eq("user_id", userId)
     .order("score", { ascending: true });
@@ -96,10 +96,15 @@ export function buildAgenda(rows: MasteryRow[]): Agenda {
 
   // Mastery gate: a topic the student has STARTED but not yet mastered (score < 60) keeps
   // the focus before any fresh topic — "don't move on until it's genuinely understood".
-  // Rows are sorted score-ascending, so within each group the weakest still wins.
+  // Sort by score asc, then syllabus order (topics.sort) asc so that among equally-weak
+  // topics — e.g. a brand-new student whose topics are all tied at the baseline — the focus
+  // is the natural START of the syllabus, not an arbitrary DB row.
   const notDue = (r: MasteryRow) => !due.some((d) => d.topic_id === r.topic_id);
+  const ordered = [...rows].sort(
+    (a, b) => a.score - b.score || (a.topics?.sort ?? 0) - (b.topics?.sort ?? 0)
+  );
   const focusRow =
-    rows.find((r) => r.attempts > 0 && r.score < 60 && notDue(r)) ?? rows.find(notDue);
+    ordered.find((r) => r.attempts > 0 && r.score < 60 && notDue(r)) ?? ordered.find(notDue);
   const focus = focusRow
     ? {
         topic_id: focusRow.topic_id,
@@ -112,9 +117,19 @@ export function buildAgenda(rows: MasteryRow[]): Agenda {
   return { review: due, focus };
 }
 
-// SM-2-ish spacing. ponytail: basic SM-2, upgrade to FSRS if retention data warrants
-export function nextReview(intervalDays: number, gotIt: boolean) {
-  const interval = gotIt ? Math.min(Math.round(intervalDays * 2.2) || 1, 60) : 1;
+// SM-2-ish spacing, graded by how well the attempt went (q in 0..1) rather than pass/fail:
+// a bare 50% barely extends the interval, a strong 90% pushes it out ~2.4x. Below 0.5 the
+// interval resets to tomorrow. The next review is also clamped to on-or-before the exam —
+// a topic answered right 20 days out must NOT be parked to +44 days, past the paper.
+// ponytail: graded SM-2, upgrade to FSRS if retention data warrants.
+export function nextReview(intervalDays: number, q: number, daysToExam: number | null = null) {
+  let interval: number;
+  if (q < 0.5) interval = 1;
+  else {
+    const mult = Math.min(2.6, Math.max(1.1, 1.0 + (q - 0.5) * 3.2)); // 0.55→1.16, 0.9→2.28, 1→2.6
+    interval = Math.min(Math.round((intervalDays || 1) * mult) || 1, 60);
+  }
+  if (daysToExam != null && daysToExam > 0) interval = Math.min(interval, Math.max(1, daysToExam));
   const d = new Date();
   d.setDate(d.getDate() + interval);
   return { interval_days: interval, review_due: d.toISOString().slice(0, 10) };
@@ -221,6 +236,10 @@ ${
       ? "IMPORTANT: This student's app language is FRENCH. Teach in French by default (switch only if they write in English).\n"
       : "";
 
+  // A brand-new student (nothing attempted yet) shouldn't be dropped mid-syllabus on an
+  // arbitrary topic — orient them first and let their answer choose the direction.
+  const brandNew = firstTurn && mastery.every((m) => m.attempts === 0);
+
   // TEACHER_BRAIN (the markdown file) + a live student-context block that adapts every turn.
   return `${TEACHER_BRAIN}
 
@@ -240,7 +259,9 @@ ${agenda.review.length ? `1. Quick spaced-repetition review: ${agenda.review.map
 ${agenda.focus ? `${agenda.review.length ? "2" : "1"}. Main focus: ${agenda.focus.name} [id: ${agenda.focus.topic_id}] (mastery ${agenda.focus.score}/100) — teach, then practise.` : ""}
 ${mat ? `\nTHE STUDENT'S OWN UPLOADED MATERIALS (teach from these — use their wording and examples):\n${mat}\n` : ""}
 ${bookBlock}${
-    firstTurn
+    brandNew
+      ? `Now begin: greet ${profile.name ?? "the student"} warmly by name in ONE short line, then ask ONE orienting question to place them before teaching — e.g. whether their exam is soon and they want to target weak areas, or they'd like to start from the beginning of the syllabus. Wait for their answer and let it choose where to start; do NOT launch into a topic yet.`
+      : firstTurn
       ? `Now begin: greet ${profile.name ?? "the student"} by name in ONE short line, then go straight into the agenda.`
       : `Continue the lesson — do NOT greet again or restart. Respond directly to the student's last message: if they attempted a question, mark their working, say clearly whether it is right or wrong, then add the silent line — [[MASTERY <topic_id> ok]] if right, or [[MASTERY <topic_id> miss | <what they misunderstood in ≤6 words>]] if wrong — for the topic being practised (use its exact [id: ...] above). If they asked something, answer it.`
   } Tune your teaching to their questionnaire above.`;
@@ -291,10 +312,14 @@ export function stripMasteryMarkers(text: string): string {
 }
 
 // Applies an update and returns XP earned for it.
+// `q` (0..1) is the graded fraction of the attempt (e.g. awarded/marks). Callers that only
+// know pass/fail pass `gotIt` and q is derived (1.0 correct, 0.25 wrong). A 50% answer — an
+// exam fail — no longer counts as full mastery: the score delta scales with q. `daysToExam`
+// (when known) clamps the next review to on-or-before the paper.
 export async function applyMasteryUpdate(
   supabase: SupabaseClient,
   userId: string,
-  input: { topic_id: string; gotIt: boolean; misconception?: string }
+  input: { topic_id: string; gotIt: boolean; q?: number; misconception?: string; daysToExam?: number | null }
 ): Promise<number> {
   const { data: row } = await supabase
     .from("mastery")
@@ -306,11 +331,15 @@ export async function applyMasteryUpdate(
     console.warn("update_mastery: unknown topic_id", input.topic_id);
     return 0;
   }
-  const delta = input.gotIt
-    ? Math.max(3, Math.round((100 - row.score) * 0.12))
-    : -Math.max(2, Math.round(row.score * 0.08));
-  const misconceptions: string[] = [...(row.misconceptions ?? [])];
-  if (input.misconception) {
+  const q = Math.max(0, Math.min(1, input.q ?? (input.gotIt ? 1 : 0.25)));
+  const passed = q >= 0.5;
+  // gain scales with q above 0.5 (a bare pass barely moves mastery); a fail erodes it.
+  const delta = passed
+    ? Math.max(1, Math.round((100 - row.score) * 0.14 * (q - 0.4)))
+    : -Math.max(1, Math.round(row.score * 0.16 * (0.5 - q)));
+  // A strong, clean answer (≥0.8) clears the topic's logged misconceptions — they've moved on.
+  const misconceptions: string[] = q >= 0.8 ? [] : [...(row.misconceptions ?? [])];
+  if (input.misconception && q < 0.8) {
     misconceptions.push(input.misconception);
     while (misconceptions.length > 8) misconceptions.shift();
   }
@@ -321,9 +350,9 @@ export async function applyMasteryUpdate(
       attempts: row.attempts + 1,
       last_reviewed: new Date().toISOString(),
       misconceptions,
-      ...nextReview(row.interval_days, input.gotIt),
+      ...nextReview(row.interval_days, q, input.daysToExam ?? null),
     })
     .eq("user_id", userId)
     .eq("topic_id", input.topic_id);
-  return input.gotIt ? XP.correct : XP.attempt;
+  return passed ? XP.correct : XP.attempt;
 }

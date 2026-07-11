@@ -3,9 +3,10 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { LADDER } from "@/lib/ladder";
+import { enablePush } from "@/components/RemindersButton";
 
 type Course = { id: string; subject: string; emoji: string; board: string };
-const STEPS = 5;
+const STEPS = 6;
 
 function Pick({
   options,
@@ -45,8 +46,8 @@ export default function Onboarding() {
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [goal, setGoal] = useState("");
   const [examDate, setExamDate] = useState("");
-  const [weeklyDays, setWeeklyDays] = useState("");
-  const [minutes, setMinutes] = useState("");
+  const [weeklyDays, setWeeklyDays] = useState("4");
+  const [minutes, setMinutes] = useState("30");
   const [studyTime, setStudyTime] = useState("");
   const [learningStyle, setLearningStyle] = useState("");
   const [struggle, setStruggle] = useState("");
@@ -140,11 +141,24 @@ export default function Onboarding() {
     }
   }
 
+  // Fire the reminders opt-in (if chosen) at peak intent, then finish. Never block finishing
+  // on it — a permission dialog or a service worker that never becomes ready must not trap the
+  // student in onboarding, so cap the wait and proceed regardless of the result.
+  async function finishWithReminders(withPush: boolean) {
+    setBusy(true);
+    if (withPush)
+      await Promise.race([
+        enablePush(),
+        new Promise<boolean>((r) => setTimeout(() => r(false), 8000)),
+      ]);
+    await finish();
+  }
+
   const canNext =
     (step === 1 && level) ||
     (step === 2 && picked.size > 0) ||
     (step === 3 && goal) ||
-    (step === 4 && weeklyDays && minutes) ||
+    step === 4 ||
     step === 5;
 
   return (
@@ -307,6 +321,12 @@ export default function Onboarding() {
                 onChange={setStudyTime}
               />
             </div>
+            <button
+              onClick={() => setStep(step + 1)}
+              className="text-xs text-[color:var(--ink-faint)] underline self-start rise"
+            >
+              Skip — set this later
+            </button>
           </>
         )}
 
@@ -354,23 +374,50 @@ export default function Onboarding() {
                 onChange={setConfidence}
               />
             </div>
+            <button
+              onClick={() => setStep(step + 1)}
+              className="text-xs text-[color:var(--ink-faint)] underline self-start rise"
+            >
+              Skip — set this later
+            </button>
+          </>
+        )}
+
+        {step === 6 && (
+          <>
+            <h1 className="display text-4xl font-semibold rise">Stay on track</h1>
+            <p className="text-sm text-[color:var(--ink-soft)] -mt-2 rise">
+              Want a nudge at your study time so you don&apos;t lose your streak?
+            </p>
+            <div className="flex flex-col gap-2 rise d1">
+              <button
+                onClick={() => finishWithReminders(true)}
+                disabled={busy}
+                className="btn"
+              >
+                {busy ? "Setting up…" : "🔔 Enable reminders"}
+              </button>
+              <button
+                onClick={() => finishWithReminders(false)}
+                disabled={busy}
+                className="btn-ghost"
+              >
+                Not now
+              </button>
+            </div>
           </>
         )}
       </div>
 
       <div className="flex gap-2">
         {step > 1 && (
-          <button onClick={() => setStep(step - 1)} className="btn-ghost flex-1">
+          <button onClick={() => setStep(step - 1)} disabled={busy} className="btn-ghost flex-1">
             Back
           </button>
         )}
-        {step < STEPS ? (
+        {step < STEPS && (
           <button disabled={!canNext} onClick={() => setStep(step + 1)} className="btn flex-[2]">
             Continue →
-          </button>
-        ) : (
-          <button disabled={busy} onClick={finish} className="btn flex-[2]">
-            {busy ? "Setting up…" : "Start learning →"}
           </button>
         )}
       </div>

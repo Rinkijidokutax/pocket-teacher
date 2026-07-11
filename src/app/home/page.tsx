@@ -158,6 +158,12 @@ export default function Home() {
 
       <XpHeader xp={profile.xp} streak={profile.streak} />
 
+      <div className="flex justify-end -mt-2 rise d1">
+        <Link href="/progress" className="text-xs font-semibold" style={{ color: "var(--accent)" }}>
+          Share my progress →
+        </Link>
+      </div>
+
       {(() => {
         const pct = Math.min(profile.today_xp / DAILY_GOAL, 1);
         const done = profile.today_xp >= DAILY_GOAL;

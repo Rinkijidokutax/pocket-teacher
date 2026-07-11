@@ -267,7 +267,7 @@ export default function Practice() {
                     onChange={(e) => {
                       setAnswer(e.target.value);
                       e.target.style.height = "auto";
-                      e.target.style.height = e.target.scrollHeight + "px";
+                      e.target.style.height = Math.min(e.target.scrollHeight, 220) + "px";
                     }}
                   />
                   <button

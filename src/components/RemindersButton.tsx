@@ -8,6 +8,30 @@ function urlB64ToUint8Array(base64: string) {
   return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
 }
 
+// Extracted so onboarding can fire the same opt-in at peak intent. Returns true on success,
+// false on denial/unsupported/error — callers decide what to show.
+export async function enablePush(): Promise<boolean> {
+  try {
+    if (typeof window === "undefined" || !("PushManager" in window)) return false;
+    const perm = await Notification.requestPermission();
+    if (perm !== "granted") return false;
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlB64ToUint8Array(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!),
+    });
+    const raw = sub.toJSON() as { endpoint: string; keys: { p256dh: string; auth: string } };
+    await fetch("/api/push/subscribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subscription: { endpoint: raw.endpoint, keys: raw.keys } }),
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export default function RemindersButton({ enabled }: { enabled: boolean }) {
   const [state, setState] = useState<"idle" | "on" | "busy" | "unsupported" | "denied">(
     enabled ? "on" : "idle"
@@ -19,24 +43,10 @@ export default function RemindersButton({ enabled }: { enabled: boolean }) {
 
   async function enable() {
     setState("busy");
-    try {
-      const perm = await Notification.requestPermission();
-      if (perm !== "granted") return setState("denied");
-      const reg = await navigator.serviceWorker.ready;
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlB64ToUint8Array(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!),
-      });
-      const raw = sub.toJSON() as { endpoint: string; keys: { p256dh: string; auth: string } };
-      await fetch("/api/push/subscribe", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subscription: { endpoint: raw.endpoint, keys: raw.keys } }),
-      });
-      setState("on");
-    } catch {
-      setState("idle");
-    }
+    if (await enablePush()) return setState("on");
+    setState(
+      typeof Notification !== "undefined" && Notification.permission === "denied" ? "denied" : "idle"
+    );
   }
 
   if (state === "on")

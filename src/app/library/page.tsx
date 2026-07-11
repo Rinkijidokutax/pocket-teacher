@@ -242,6 +242,9 @@ export default function Library() {
                 <p className="text-xs text-[color:var(--ink-soft)] whitespace-pre-wrap mt-1 leading-relaxed">
                   {matSummary.content}
                 </p>
+                <p className="text-[11px] text-[color:var(--ink-faint)] mt-2">
+                  AI-generated — double-check with your textbook.
+                </p>
               </div>
             )}
           </div>

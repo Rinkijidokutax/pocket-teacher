@@ -165,6 +165,9 @@ export default function Study() {
               <p className="text-sm text-[color:var(--ink-soft)] whitespace-pre-wrap mt-2 leading-relaxed">
                 {summary.content}
               </p>
+              <p className="text-[11px] text-[color:var(--ink-faint)] mt-3">
+                AI-generated — double-check with your textbook.
+              </p>
             </div>
           )}
 

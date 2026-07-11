@@ -107,6 +107,10 @@ export async function POST(req: Request) {
   const courseCtx = course
     ? { ...course, exam_date: enr?.exam_date ?? course.exam_date }
     : null;
+  // Clamp spaced-repetition reviews to on-or-before the exam (never park a topic past the paper).
+  const daysToExam = courseCtx?.exam_date
+    ? Math.ceil((new Date(courseCtx.exam_date).getTime() - Date.now()) / 86400000)
+    : null;
 
   const mastery = await loadMastery(supabase, user.id, activeCourse);
   const { data: materials } = await supabase
@@ -308,11 +312,10 @@ export async function POST(req: Request) {
             for (const block of final.content) {
               if (block.type === "tool_use" && block.name === "update_mastery") {
                 masteryApplied++;
-                xpEarned += await applyMasteryUpdate(
-                  supabase,
-                  user.id,
-                  block.input as { topic_id: string; gotIt: boolean; misconception?: string }
-                );
+                xpEarned += await applyMasteryUpdate(supabase, user.id, {
+                  ...(block.input as { topic_id: string; gotIt: boolean; misconception?: string }),
+                  daysToExam,
+                });
                 toolResults.push({ type: "tool_result", tool_use_id: block.id, content: "recorded" });
               }
             }
@@ -338,7 +341,7 @@ export async function POST(req: Request) {
           if (message && masteryApplied === 0) {
             for (const mk of parseMasteryMarkers(assistantText)) {
               masteryApplied++;
-              xpEarned += await applyMasteryUpdate(supabase, user.id, mk);
+              xpEarned += await applyMasteryUpdate(supabase, user.id, { ...mk, daysToExam });
             }
           }
           const cleanText = stripBrackets(assistantText.slice(dropPrefix)).trim();

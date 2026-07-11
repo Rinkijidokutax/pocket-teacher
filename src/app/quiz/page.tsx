@@ -103,6 +103,9 @@ export default function Quiz() {
         </div>
       ) : (
         <div className="flex flex-col gap-4">
+          <p className="text-[11px] text-[color:var(--ink-faint)]">
+            AI-generated — double-check with your textbook.
+          </p>
           {questions.map((question, qi) => (
             <div key={qi} className="card p-4">
               <p className="font-semibold text-sm mb-3">
