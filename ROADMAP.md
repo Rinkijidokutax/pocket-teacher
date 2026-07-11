@@ -60,6 +60,16 @@ Cambridge curriculum"), and #3 ("keeps returning to a topic until it's mastered"
 
 ---
 
+## Feature phases — status
+- [x] **C1** — real daily-goal ring on Home (`today_xp`, resets on day roll-over) + saved AI summaries resurfaced on Study hub (dbb15cc, live).
+- [x] **C3 (partial) — "Examiner's report on you"** — original STRENGTHS/WATCH/NEXT generated from the student's own `question_attempts` + misconceptions + command-word stats; card on Progress (dbb15cc, live-verified). 100% own-data, no copyrighted content.
+- [ ] **C2 — Past-paper Finder** — HELD: needs verified per-syllabus paper structures; fabricating them risks wrong data + dead/copyright-adjacent links. Do only with sourced structures.
+- [ ] **C3 (rest) — Timed mock exams** to a real paper blueprint (blocked on C2's paper structures).
+
+## Known architectural limits (not quick bugs)
+- **B1/B2 — client-forgeable XP / attempts / mastery:** inherent to the anon-key client architecture (a determined user can only cheat their own numbers). A true fix needs a service-role/edge-function authoritative path — worth it only when data feeds *teacher/school* decisions, not solo revision. Mitigated: `record_activity` caps XP at 60/call.
+- **A5 — true 24/7:** code-ready via `TUTOR_MODELS` env; needs paid OpenRouter credits or an Anthropic key (Miguel's call).
+
 ## Recently completed (audit round 2, commit 9471af0 — live)
 13 defects fixed & deployed: marking-outage integrity (no more wrongful 0/N poisoning
 mastery), re-attempt XP farming blocked, answer/difficulty/count input caps, tutor keeps
