@@ -192,7 +192,7 @@ export async function genExaminerReport(
   return { strengths, watch, next };
 }
 
-// Exam-style questions with marks + a point-by-point mark scheme (SaveMyExams-style, but our
+// Exam-style questions with marks + a point-by-point mark scheme (exam-board style, but our
 // own original wording — never copied past-paper text). The tutor/marker grades free-text
 // answers against the scheme, so questions carry the scheme the model can mark against.
 export type MarkPoint = { point: string; marks: number; keywords: string[] };

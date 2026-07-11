@@ -108,6 +108,7 @@ export default function Study() {
     { key: "flashcards", icon: "▤", label: "Flashcards", sub: "Active recall", onClick: () => router.push(`/flashcards?course=${active}`) },
     { key: "quiz", icon: "◎", label: "Quiz me", sub: "Adaptive questions", onClick: () => router.push(`/quiz?course=${active}`) },
     { key: "practice", icon: "✍", label: "Exam practice", sub: "AI-marked exam questions", onClick: () => router.push(`/practice?course=${active}`) },
+    { key: "papers", icon: "📄", label: "Exam papers", sub: "Practice papers + past papers", onClick: () => router.push("/papers") },
     { key: "plan", icon: "◱", label: "Revision plan", sub: "Day-by-day to exam", onClick: buildPlan },
     { key: "books", icon: "📖", label: "Book tutor", sub: "Chat about a set text", onClick: () => router.push("/books") },
   ];
