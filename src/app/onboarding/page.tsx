@@ -54,6 +54,9 @@ export default function Onboarding() {
   const [confidence, setConfidence] = useState("");
   const [motivation, setMotivation] = useState("");
   const [coursesLoading, setCoursesLoading] = useState(false);
+  // Which ladder levels actually have a ready-made subject catalogue. University/Self have
+  // none yet, so offering them dead-ends the student at "Couldn't load subjects".
+  const [openLevels, setOpenLevels] = useState<Set<string> | null>(null);
 
   const loadCourses = () => {
     setCoursesLoading(true);
@@ -82,13 +85,16 @@ export default function Onboarding() {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const [{ data: p }, { data: en }] = await Promise.all([
+      const [{ data: p }, { data: en }, { data: lv }] = await Promise.all([
         supabase.from("profiles").select("level, language").eq("id", user.id).maybeSingle(),
         supabase.from("enrollments").select("course_id").eq("user_id", user.id),
+        supabase.from("courses").select("level").eq("is_template", true),
       ]);
       if (p?.level) setLevel(p.level);
       if (p?.language) setLanguage(p.language);
       if (en && en.length) setPicked(new Set(en.map((e) => e.course_id)));
+      // Only offer levels that have a catalogue (leave null on failure → show all as fallback).
+      if (lv) setOpenLevels(new Set(lv.map((r) => r.level)));
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -203,7 +209,7 @@ export default function Onboarding() {
               in your studies?
             </h1>
             <div className="flex flex-col gap-2 rise d1">
-              {LADDER.map((l) => (
+              {LADDER.filter((l) => !openLevels || openLevels.has(l.id)).map((l) => (
                 <button
                   key={l.id}
                   onClick={() => setLevel(l.id)}
