@@ -35,27 +35,46 @@ export default function Library() {
   async function summarise(m: Material) {
     setMatBusy(m.id + ":s");
     setMatSummary(null);
-    const res = await fetch("/api/summary", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ materialId: m.id, courseId: m.course_id }),
-    });
-    const out = await res.json().catch(() => ({}));
-    setMatBusy("");
-    if (out.summary) setMatSummary({ id: m.id, ...out.summary });
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 45000);
+    try {
+      const res = await fetch("/api/summary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ materialId: m.id, courseId: m.course_id }),
+        signal: ctrl.signal,
+      });
+      const out = await res.json().catch(() => ({}));
+      if (out.summary) setMatSummary({ id: m.id, ...out.summary });
+      else setStatus("Couldn't summarise — check your connection and try again.");
+    } catch {
+      setStatus("Couldn't summarise — check your connection and try again.");
+    } finally {
+      clearTimeout(to);
+      setMatBusy("");
+    }
   }
 
   async function makeCards(m: Material) {
     if (!m.course_id) return;
     setMatBusy(m.id + ":c");
-    const res = await fetch("/api/flashcards/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ courseId: m.course_id, materialId: m.id }),
-    });
-    const out = await res.json().catch(() => ({}));
-    setMatBusy("");
-    setStatus(out.ok ? `Added ${out.created} flashcards — review in Study ✓` : "Couldn't make cards");
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 45000);
+    try {
+      const res = await fetch("/api/flashcards/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseId: m.course_id, materialId: m.id }),
+        signal: ctrl.signal,
+      });
+      const out = await res.json().catch(() => ({}));
+      setStatus(out.ok ? `Added ${out.created} flashcards — review in Study ✓` : "Couldn't make cards");
+    } catch {
+      setStatus("Couldn't make cards — check your connection and try again.");
+    } finally {
+      clearTimeout(to);
+      setMatBusy("");
+    }
   }
 
   async function refresh(userId: string) {
@@ -69,8 +88,9 @@ export default function Library() {
 
   useEffect(() => {
     (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return router.replace("/login");
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return router.replace("/login");
+      const user = session.user;
       setUid(user.id);
       if (typeof window !== "undefined" && window.location.search.includes("syllabus=1"))
         setAsSyllabus(true);
@@ -88,7 +108,9 @@ export default function Library() {
     if (!file || !uid) return;
     setStatus("Uploading…");
     const kind = asSyllabus ? "syllabus" : kindOf(file.name);
-    const path = `${uid}/${crypto.randomUUID()}-${file.name}`;
+    // crypto.randomUUID throws on pre-Chromium-92 Android WebViews — fall back to a timestamp id.
+    const rid = crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const path = `${uid}/${rid}-${file.name}`;
     const { error: upErr } = await supabase.storage.from("materials").upload(path, file);
     if (upErr) {
       setStatus("Upload failed: " + upErr.message);
@@ -111,20 +133,31 @@ export default function Library() {
     }
     setStatus(asSyllabus ? "Reading your syllabus…" : "Processing…");
     await refresh(uid);
-    const res = await fetch("/api/materials/process", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ materialId: mat.id }),
-    });
-    const out = await res.json().catch(() => ({}));
-    await refresh(uid);
-    if (asSyllabus && out.courseId) {
-      setStatus("");
-      router.push(`/session?course=${out.courseId}`);
-      return;
+    // Never leave the student stuck on "Reading…" if the request drops — cap it, then fail cleanly.
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 45000);
+    try {
+      const res = await fetch("/api/materials/process", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ materialId: mat.id }),
+        signal: ctrl.signal,
+      });
+      const out = await res.json().catch(() => ({}));
+      await refresh(uid);
+      if (asSyllabus && out.courseId) {
+        setStatus("");
+        router.push(`/session?course=${out.courseId}`);
+        return;
+      }
+      setStatus(res.ok ? "Ready ✓ your teacher can use it now" : "Processing failed");
+      if (fileRef.current) fileRef.current.value = "";
+    } catch {
+      await refresh(uid);
+      setStatus("Processing failed — check your connection and tap to try again.");
+    } finally {
+      clearTimeout(to);
     }
-    setStatus(res.ok ? "Ready ✓ your teacher can use it now" : "Processing failed");
-    if (fileRef.current) fileRef.current.value = "";
   }
 
   return (

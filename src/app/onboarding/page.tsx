@@ -99,6 +99,28 @@ export default function Onboarding() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Rehydrate answers persisted by a finish() that bounced (blip / re-auth) so a re-login never
+  // wipes the questionnaire. Guarded — localStorage can throw in some webviews.
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("pt_onboarding");
+      if (!saved) return;
+      const s = JSON.parse(saved);
+      if (s.level) setLevel(s.level);
+      if (s.language) setLanguage(s.language);
+      if (Array.isArray(s.picked) && s.picked.length) setPicked(new Set(s.picked));
+      if (s.goal) setGoal(s.goal);
+      if (s.examDate) setExamDate(s.examDate);
+      if (s.weeklyDays) setWeeklyDays(s.weeklyDays);
+      if (s.minutes) setMinutes(s.minutes);
+      if (s.studyTime) setStudyTime(s.studyTime);
+      if (s.learningStyle) setLearningStyle(s.learningStyle);
+      if (s.struggle) setStruggle(s.struggle);
+      if (s.confidence) setConfidence(s.confidence);
+      if (s.motivation) setMotivation(s.motivation);
+    } catch {}
+  }, []);
+
   function toggle(id: string) {
     const n = new Set(picked);
     n.has(id) ? n.delete(id) : n.add(id);
@@ -108,8 +130,23 @@ export default function Onboarding() {
   async function finish() {
     setBusy(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return router.replace("/login");
+      // Persist answers FIRST so a network blip / re-auth at the session check below can't
+      // discard the questionnaire — mount rehydrates them. Guarded: localStorage can throw in
+      // some webviews.
+      try {
+        localStorage.setItem(
+          "pt_onboarding",
+          JSON.stringify({
+            level, language, picked: [...picked], goal, examDate,
+            weeklyDays, minutes, studyTime, learningStyle, struggle, confidence, motivation,
+          })
+        );
+      } catch {}
+      // Local session (no network) — a getUser() network blip must not bounce a valid student
+      // to /login and drop their answers.
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return router.replace("/login");
+      const user = session.user;
       const survey = {
         goal,
         weekly_days: weeklyDays ? Number(weeklyDays) : null,
@@ -157,6 +194,9 @@ export default function Onboarding() {
         alert("Couldn’t save your profile — check your connection and tap “Start learning” again.");
         return;
       }
+      // Answers are saved to the profile now — drop the local draft so a later visit doesn't
+      // rehydrate stale input.
+      try { localStorage.removeItem("pt_onboarding"); } catch {}
       // Straight to the app — don't block first value behind a multi-subject AI diagnostic
       // (minutes on the free model). Mastery seeds at baseline; the tutor adapts from lesson 1.
       router.replace("/home");

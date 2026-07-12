@@ -17,8 +17,10 @@ export default function Courses() {
 
   useEffect(() => {
     (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return router.replace("/login");
+      // Local session (no network) — a getUser() network blip must not bounce a valid session.
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return router.replace("/login");
+      const user = session.user;
       const { data: p } = await supabase
         .from("profiles")
         .select("level")

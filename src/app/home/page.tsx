@@ -39,8 +39,11 @@ export default function Home() {
     setError(false);
     setLoaded(false);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return router.replace("/login");
+      // Local session (no network) — a getUser() network blip in an in-app webview / on weak
+      // signal must not evict a validly-logged-in student. getSession reads hydrated storage.
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return router.replace("/login");
+      const user = session.user;
       const { data: p, error: pErr } = await supabase
         .from("profiles")
         .select("name, xp, streak, today_xp, last_study_date, onboarded, reminders, survey, streak_freezes")

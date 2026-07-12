@@ -96,10 +96,13 @@ export async function POST(req: Request) {
         name: t.name,
         sort: i,
       }));
-      const { data: inserted } = await supabase
+      const { data: inserted, error: topicsErr } = await supabase
         .from("topics")
         .insert(topicRows)
         .select("id");
+      // No topics = a course with 0 topics and no mastery. Fail loudly instead of a false "ready".
+      if (topicsErr || !inserted?.length)
+        throw topicsErr ?? new Error("no topics inserted");
       await supabase
         .from("enrollments")
         .upsert({ user_id: user.id, course_id: course.id });

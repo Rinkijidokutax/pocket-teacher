@@ -24,8 +24,9 @@ export default function Study() {
 
   useEffect(() => {
     (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return router.replace("/login");
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return router.replace("/login");
+      const user = session.user;
       const { data: e } = await supabase
         .from("enrollments")
         .select("course_id, courses(subject, emoji)")
@@ -72,33 +73,43 @@ export default function Study() {
     setBusy("summary");
     setSummary(null);
     setErr("");
-    const res = await fetch("/api/summary", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ courseId: active }),
-    });
-    const out = await res.json().catch(() => ({}));
-    setBusy("");
-    if (out.summary) setSummary(out.summary);
-    else setErr("Couldn’t write a summary just now — give it another tap.");
+    try {
+      const res = await fetch("/api/summary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseId: active }),
+      });
+      const out = await res.json().catch(() => ({}));
+      if (out.summary) setSummary(out.summary);
+      else setErr("Couldn’t write a summary just now — give it another tap.");
+    } catch {
+      setErr("Couldn’t write a summary just now — give it another tap.");
+    } finally {
+      setBusy("");
+    }
   }
 
   async function buildPlan() {
     setBusy("plan");
     setErr("");
-    const res = await fetch("/api/plan/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ courseId: active }),
-    });
-    const out = await res.json().catch(() => ({}));
-    setBusy("");
-    if (res.ok && (out.created ?? 0) > 0) {
-      router.push(`/plan?course=${active}`);
-    } else if (out.error === "no_mastery") {
-      setErr("Do a quick lesson or quiz first — then I can plan your revision.");
-    } else {
+    try {
+      const res = await fetch("/api/plan/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseId: active }),
+      });
+      const out = await res.json().catch(() => ({}));
+      if (res.ok && (out.created ?? 0) > 0) {
+        router.push(`/plan?course=${active}`);
+      } else if (out.error === "no_mastery") {
+        setErr("Do a quick lesson or quiz first — then I can plan your revision.");
+      } else {
+        setErr("Couldn’t build a plan just now — give it another tap.");
+      }
+    } catch {
       setErr("Couldn’t build a plan just now — give it another tap.");
+    } finally {
+      setBusy("");
     }
   }
 

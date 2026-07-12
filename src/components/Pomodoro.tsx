@@ -23,8 +23,18 @@ export default function Pomodoro() {
       const nextMode = mode === "focus" ? "break" : "focus";
       setMode(nextMode);
       setLeft(nextMode === "focus" ? FOCUS : BREAK);
-      if (typeof Notification !== "undefined" && Notification.permission === "granted")
-        new Notification(mode === "focus" ? "Break time! 🎉" : "Back to it 💪");
+      // `new Notification()` is an illegal constructor on Android Chrome/WebView and throws
+      // synchronously — with no error boundary it white-screens the whole app. Use the
+      // registered service worker's showNotification instead (guarded, never throws here).
+      if (
+        typeof Notification !== "undefined" &&
+        Notification.permission === "granted" &&
+        typeof navigator !== "undefined" &&
+        navigator.serviceWorker
+      ) {
+        const msg = mode === "focus" ? "Break time! 🎉" : "Back to it 💪";
+        navigator.serviceWorker.ready.then((reg) => reg.showNotification(msg)).catch(() => {});
+      }
     }
   }, [left, mode]);
 

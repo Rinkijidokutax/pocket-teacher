@@ -343,7 +343,7 @@ export async function applyMasteryUpdate(
     misconceptions.push(input.misconception);
     while (misconceptions.length > 8) misconceptions.shift();
   }
-  await supabase
+  const { error } = await supabase
     .from("mastery")
     .update({
       score: Math.max(0, Math.min(100, row.score + delta)),
@@ -354,5 +354,12 @@ export async function applyMasteryUpdate(
     })
     .eq("user_id", userId)
     .eq("topic_id", input.topic_id);
+  // If the write didn't land (statement timeout under load, mobile request torn down after
+  // the SELECT), don't credit XP — otherwise the student sees "+XP" while score/review_due/
+  // misconceptions never move and spaced repetition silently stalls. One guard covers all callers.
+  if (error) {
+    console.error("applyMasteryUpdate: mastery update failed", error);
+    return 0;
+  }
   return passed ? XP.correct : XP.attempt;
 }

@@ -163,19 +163,19 @@ export async function POST(req: Request) {
     sid = session.id;
     xpEarned += XP.session;
 
-    // streak
+    // Display-only streak for the greeting. Do NOT persist streak/last_study_date here:
+    // record_activity (post-stream, below — xpEarned already includes XP.session) owns
+    // streak/today_xp/streak_freezes/last_study_date. A pre-stream write that sets
+    // last_study_date=today would block its daily today_xp reset and its held-freeze
+    // streak-bridge for a student whose first action today is a lesson.
+    // ponytail: in-memory only, slight display staleness on a bridged freeze is fine.
     const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-    const streak =
+    profile.streak =
       profile.last_study_date === today()
         ? profile.streak
         : profile.last_study_date === yesterday
           ? profile.streak + 1
           : 1;
-    await supabase
-      .from("profiles")
-      .update({ streak, last_study_date: today() })
-      .eq("id", user.id);
-    profile.streak = streak;
   }
 
   const OPENER = "(The student just opened today's session. Greet them and begin the agenda.)";

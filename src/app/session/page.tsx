@@ -73,8 +73,11 @@ export default function Session() {
     if (startedRef.current) return;
     startedRef.current = true;
     (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return router.replace("/login");
+      // Read the hydrated session from storage (no network round-trip) so a transient
+      // getUser() blip on patchy data / in-app browsers can't evict a validly-logged-in student.
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return router.replace("/login");
+      const user = session.user;
       const params = new URLSearchParams(window.location.search);
       const param = params.get("course");
       const topicParam = params.get("topic");
@@ -120,6 +123,7 @@ export default function Session() {
     setStreaming(true);
     setMessages((m) => [...m, { role: "assistant", content: "" }]);
 
+    const ctrl = new AbortController();
     let res: Response;
     try {
       res = await fetch("/api/chat", {
@@ -131,6 +135,7 @@ export default function Session() {
           courseId: courseRef.current,
           bookId: bookRef.current,
         }),
+        signal: ctrl.signal,
       });
     } catch {
       // network error before any response — never leave the typing dots spinning
@@ -173,9 +178,13 @@ export default function Session() {
     const decoder = new TextDecoder();
     let acc = "";
     let xpShown = false;
+    // A stalled mobile socket (half-open, delivers no bytes, never errors) would leave read()
+    // hanging forever with the composer disabled. Abort after 30s of silence; reset on each chunk.
+    let idle = setTimeout(() => ctrl.abort(), 30000);
     try {
       for (;;) {
         const { done, value } = await reader.read();
+        clearTimeout(idle);
         if (done) break;
         acc += decoder.decode(value, { stream: true });
         if (acc.includes("[[TEACHER_DOWN]]")) {
@@ -196,10 +205,23 @@ export default function Session() {
         }
         const display = acc.replace(/\[\[XP:\d+\]\]/g, "").replace(/\[\[XP:\d*$/, "");
         setMessages((m) => [...m.slice(0, -1), { role: "assistant", content: display }]);
+        idle = setTimeout(() => ctrl.abort(), 30000);
       }
     } catch {
-      // stream broke mid-answer — keep what we have rather than locking the UI
+      // Idle timeout fired (or the socket errored): recover like the other paths so the
+      // composer re-enables instead of spinning forever on a half-open connection.
+      if (ctrl.signal.aborted) {
+        clearTimeout(idle);
+        setStreaming(false);
+        setMessages((m) => [
+          ...m.slice(0, -1),
+          { role: "assistant", content: "Connection dropped — send your message again." },
+        ]);
+        return;
+      }
+      // clean/other mid-answer break — keep what we have rather than locking the UI
     }
+    clearTimeout(idle);
     setStreaming(false);
     // A turn that streamed only markers (no visible text) would otherwise leave the empty
     // placeholder bubble stuck on typing dots forever — drop it.

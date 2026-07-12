@@ -10,6 +10,7 @@ type Course = { course_id: string; courses: { subject: string; emoji: string } |
 type Row = {
   topic_id: string;
   score: number;
+  attempts: number;
   topics: { name: string; unit: string; sort: number; course_id: string } | null;
 };
 
@@ -67,8 +68,9 @@ export default function Progress() {
       .single();
     if (!data?.share_token) return;
     const url = `${window.location.origin}/report?t=${data.share_token}`;
-    // Native share sheet (mobile) — feature-detected. A cancel throws AbortError, so the
-    // catch just swallows it: cancelling must not surface an error or fall through to a toast.
+    // Native share sheet (mobile) — feature-detected. A cancel throws AbortError (silent). Any
+    // OTHER rejection (in-app webviews often reject Web Share) falls through to clipboard/inline
+    // URL below, so the student can still get their report link.
     if (navigator.share) {
       try {
         await navigator.share({
@@ -76,12 +78,13 @@ export default function Progress() {
           text: "Here's my revision progress on Pocket Teacher 📈",
           url,
         });
-      } catch {
-        // ponytail: user cancelled or share failed — nothing to show
+        return;
+      } catch (e) {
+        if ((e as Error)?.name === "AbortError") return; // user cancelled — nothing to show
+        // webview rejected Web Share — fall through to the copy fallback
       }
-      return;
     }
-    // Fallback (desktop / no Web Share) — copy the link.
+    // Fallback (desktop / no Web Share / webview rejected) — copy the link.
     try {
       await navigator.clipboard.writeText(url);
       setCopied(true);
@@ -93,8 +96,10 @@ export default function Progress() {
 
   useEffect(() => {
     (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return router.replace("/login");
+      // Local session (no network) — a getUser() network blip must not bounce a valid session.
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return router.replace("/login");
+      const user = session.user;
       const { data: p } = await supabase
         .from("profiles")
         .select("xp, streak")
@@ -125,7 +130,7 @@ export default function Progress() {
       if (ids.length === 0) return setRows([]);
       const { data } = await supabase
         .from("mastery")
-        .select("topic_id, score, topics(name, unit, sort, course_id)")
+        .select("topic_id, score, attempts, topics(name, unit, sort, course_id)")
         .eq("user_id", user.id)
         .in("topic_id", ids);
       const sorted = ((data ?? []) as unknown as Row[]).sort(
@@ -136,8 +141,11 @@ export default function Progress() {
   }, [active]);
 
   const units = [...new Set(rows.map((r) => r.topics?.unit))].filter(Boolean) as string[];
-  const overall = rows.length
-    ? Math.round(rows.reduce((s, r) => s + r.score, 0) / rows.length)
+  // Only assessed topics (attempts>0) count — a fresh user's unassessed 20-seeds must not drag
+  // the average into danger-red and tell them they're failing everything.
+  const assessed = rows.filter((r) => r.attempts > 0);
+  const overall = assessed.length
+    ? Math.round(assessed.reduce((s, r) => s + r.score, 0) / assessed.length)
     : 0;
 
   return (
@@ -179,7 +187,10 @@ export default function Progress() {
                 <p className="eyebrow">Overall mastery</p>
                 <p className="text-xs text-[color:var(--ink-faint)] mt-1">{rows.length} topics</p>
               </div>
-              <p className="display text-4xl font-semibold" style={{ color: color(overall) }}>
+              <p
+                className="display text-4xl font-semibold"
+                style={{ color: assessed.length ? color(overall) : "var(--ink-faint)" }}
+              >
                 {overall}
                 <span className="text-xl">%</span>
               </p>
@@ -198,7 +209,11 @@ export default function Progress() {
                       <div className="w-24 h-1.5 rounded-full bg-[color:var(--paper-2)] overflow-hidden">
                         <div
                           className="h-full rounded-full"
-                          style={{ width: `${r.score}%`, background: color(r.score) }}
+                          style={{
+                            width: `${r.score}%`,
+                            // Never-assessed topics render neutral/muted, not danger-red.
+                            background: r.attempts > 0 ? color(r.score) : "var(--line-strong)",
+                          }}
                         />
                       </div>
                     </div>
